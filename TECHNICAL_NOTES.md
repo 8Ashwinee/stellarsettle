@@ -627,7 +627,7 @@ client.set_fee_recipients(&admin, &vec![
 
 For questions about implementation details:
 
-- Review code comments in `/contracts/chainsetttle/src/lib.rs`
+- Review code comments in `/contracts/stellarsettle/src/lib.rs`
 - Check usage examples in `NEW_FEATURES_USAGE.md`
 - Review acceptance criteria in `IMPLEMENTATION_SUMMARY.md`
 

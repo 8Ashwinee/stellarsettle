@@ -10,8 +10,8 @@ authorization, mutates no state, and is not gated by the emergency pause. It
 panics with `"shipment not found"` when `shipment_id` is unknown (including
 shipments already moved to the archive by `archive_shipment`).
 
-Implementation: `ChainSettleContract::get_completion_percentage`
-(`contracts/chainsetttle/src/lib.rs`).
+Implementation: `StellarSettleContract::get_completion_percentage`
+(`contracts/stellarsettle/src/lib.rs`).
 
 ---
 
@@ -226,7 +226,7 @@ clamped to `[0, 100]`.
 
 ## 6. Tests
 
-`contracts/chainsetttle/src/test_query.rs` pins every rule documented here:
+`contracts/stellarsettle/src/test_query.rs` pins every rule documented here:
 
 | Test | Documents |
 |---|---|

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation adds three major feature sets to the ChainSettle contract as requested:
+This implementation adds three major feature sets to the StellarSettle contract as requested:
 
 1. **Treasury Revenue Tracking & Dust Withdrawal**
 2. **Multi-Recipient Fee Distribution**
@@ -188,7 +188,7 @@ Suppliers can query `get_buyer_reliability()` to evaluate:
 
 All changes made to:
 
-- `/contracts/chainsetttle/src/lib.rs`
+- `/contracts/stellarsettle/src/lib.rs`
 
 ### Key Sections Modified
 

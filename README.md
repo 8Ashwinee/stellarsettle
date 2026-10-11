@@ -1,15 +1,15 @@
-ChainSettle — Contract Repo
-![CI](https://github.com/shakurJJ/chainsettle-contract/actions/workflows/ci.yml/badge.svg)
-![codecov](https://codecov.io/gh/shakurJJ/chainsettle-contract/branch/main/graph/badge.svg)
+# StellarSettle Monorepo
+![CI](https://github.com/shakurJJ/stellarsettle-contract/actions/workflows/ci.yml/badge.svg)
+![codecov](https://codecov.io/gh/shakurJJ/stellarsettle-contract/branch/main/graph/badge.svg)
 
 > **Milestone-based supply chain escrow on Stellar Soroban**
-> ChainSettle is a Soroban smart contract that locks buyer payment in escrow and automatically releases funds to the supplier as each delivery milestone is confirmed on-chain. No middlemen, no delayed wire transfers, no trust required.
-> This is Repo 1 of 3 in the ChainSettle project:
-> Repo Description
-> `chainsetttle-contract` ← you are here Soroban smart contract (Rust)
-> `chainsetttle-frontend` React + Freighter wallet UI
-
-## `chainsetttle-backend` Node.js API, notifications, off-chain metadata
+> StellarSettle is a Soroban smart contract that locks buyer payment in escrow and automatically releases funds to the supplier as each delivery milestone is confirmed on-chain. No middlemen, no delayed wire transfers, no trust required.
+>
+> This repository is a Cargo workspace monorepo containing StellarSettle's Soroban contracts:
+> - `contracts/stellarsettle` — milestone-based supply chain escrow
+> - `contracts/loan_manager` — Soroban lending pool
+>
+> The frontend and backend are companion integrations referenced below; they are not workspace members in this checkout.
 
 Table of Contents
 How It Works
@@ -82,7 +82,7 @@ Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                  ChainSettle Contract (Soroban)               │
+│                  StellarSettle Contract (Soroban)               │
 │                                                              │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐ │
 │  │  Shipment    │   │  Milestone   │   │   USDC Escrow    │ │
@@ -192,7 +192,7 @@ completion_rate = completed / outcomes       // when outcomes > 0
 This is only an application-level metric, not a value returned or enforced by
 the contract. Because `disputed` counts milestone dispute events while the
 other fields count shipment outcomes, the ratio should be labelled clearly
-and should not be presented as an official ChainSettle score. A safer UI can
+and should not be presented as an official StellarSettle score. A safer UI can
 show the three counters separately and display `Not enough history` until a
 minimum number of completed shipments has been reached.
 Example read-only response:
@@ -301,7 +301,7 @@ The allowlist gates shipment creation only. After a shipment is created, all pay
 
 ### Granular Per-Operation Pause Flags
 
-ChainSettle allows administrators to pause specific operational sub-systems without halting the entire contract. This enables targeted incident containment (e.g., stopping new shipment creation while allowing existing in-flight shipments to settle and release escrow).
+StellarSettle allows administrators to pause specific operational sub-systems without halting the entire contract. This enables targeted incident containment (e.g., stopping new shipment creation while allowing existing in-flight shipments to settle and release escrow).
 
 - **Supported Operations**: `create`, `confirm`, `dispute`, `advance`, `claim`.
 - **Functions**:
@@ -553,7 +553,7 @@ escrow plus the total payout weights remain unchanged.
 
 Partial Disputes & Escalation Checks
 Partial Disputes Mechanics
-In real-world supply chain transactions, delivered goods may be partially damaged, incomplete, or slightly off-specification without justifying a total transaction freeze. ChainSettle supports partial disputes via `raise_partial_dispute()`:
+In real-world supply chain transactions, delivered goods may be partially damaged, incomplete, or slightly off-specification without justifying a total transaction freeze. StellarSettle supports partial disputes via `raise_partial_dispute()`:
 1–99% Contested Split: The buyer specifies `contested_percent` (must be between `1` and `99`). The contract calculates:
 Uncontested share: `(100 - contested_percent)%` of milestone value.
 Contested share: `contested_percent%` of milestone value.
@@ -563,14 +563,14 @@ Resolution Path (`resolve_dispute`):
 Arbiter Approves (`approve = true`): Supplier receives the contested portion minus the arbiter fee. Dispute bond is returned to the buyer. Milestone status transitions to `Resolved`.
 Arbiter Rejects (`approve = false`): Buyer receives a refund of the contested portion minus the arbiter fee. Milestone status transitions to `Resolved` (unlike full disputes where rejection resets status to `Pending`, partial disputes finalize at `Resolved` because the uncontested portion was already paid out).
 Dispute Escalation & Escalation Threshold
-To ensure disputes do not stall indefinitely without arbiter action, ChainSettle provides a dispute escalation check mechanism:
+To ensure disputes do not stall indefinitely without arbiter action, StellarSettle provides a dispute escalation check mechanism:
 Configuring the Threshold: The contract admin configures the global escalation threshold using `set_escalation_threshold(admin, threshold_ledgers)`. Setting `threshold_ledgers = 0` disables escalation checks (default).
 Checking Escalation (`check_escalation`): Anyone (buyer, supplier, arbiter, or automated backend services) can invoke `check_escalation(shipment_id, milestone_index)`.
 Ledger Sequence Comparison: `check_escalation()` inspects the target milestone:
 Verifies the milestone is in `MilestoneStatus::Disputed`.
 Compares the current ledger sequence (`env.ledger().sequence()`) against `opened_ledger + threshold` (where `opened_ledger` is recorded in `dispute_opened_ledger` when the dispute was raised).
 If `current_ledger >= opened_ledger + threshold`, the contract emits a `dispute_escalated` event containing `(milestone_index, opened_ledger, current_ledger)`.
-Off-Chain Handling: The backend service (`chainsetttle-backend`) monitors `dispute_escalated` events to alert platform administrators, notify the assigned arbiter, or trigger automated resolution escalation workflows.
+Off-Chain Handling: The backend service (`stellarsettle-backend`) monitors `dispute_escalated` events to alert platform administrators, notify the assigned arbiter, or trigger automated resolution escalation workflows.
 Dispute Auto-Resolution Timeout
 If an arbiter fails to act on an open dispute, the dispute can stall a milestone indefinitely and freeze its payment. Each shipment configures a time-based auto-resolution fallback that lets *anyone* finalize the dispute once a deadline passes, so the buyer is never permanently blocked by an unresponsive arbiter.
 
@@ -870,7 +870,7 @@ stellar contract invoke \
 
 `version() → (u32, u32, u32)` (read-only) — #571
 
-Returns the semantic contract version `(major, minor, patch)` sourced from constants that match `contracts/chainsetttle/Cargo.toml`. No authorization required.
+Returns the semantic contract version `(major, minor, patch)` sourced from constants that match `contracts/stellarsettle/Cargo.toml`. No authorization required.
 
 `storage_schema_version() → u32` (read-only) — #571
 
@@ -1834,7 +1834,7 @@ stellar contract invoke \
 ```
 
 Arbiter Pool & Assignment
-ChainSettle supports an active pool of trusted arbiters, allowing for automatic assignment to distribute the dispute resolution workload.
+StellarSettle supports an active pool of trusted arbiters, allowing for automatic assignment to distribute the dispute resolution workload.
 `add_arbiter_to_pool(admin, arbiter: Address)`: Admin-only. Adds an arbiter address to the active pool.
 `remove_arbiter_from_pool(admin, arbiter: Address)`: Admin-only. Removes an arbiter from the active pool.
 `get_arbiter_pool() → Vec<Address>` (read-only): Returns the current list of active arbiters in the pool.
@@ -2232,7 +2232,7 @@ time. The direct admin setters remain separate contract entry points; use the
 proposal workflow when a change must be subject to the configured timelock.
 ---
 Multisig Admin Governance
-ChainSettle supports multi-signature admin governance to prevent unilateral contract
+StellarSettle supports multi-signature admin governance to prevent unilateral contract
 changes. Once enabled, sensitive admin operations require approval from multiple
 trusted keys, and the legacy single-key `upgrade()` path is disabled.
 
@@ -2315,7 +2315,7 @@ Security notes:
 ---
 
 Contract Upgrades & Migration
-ChainSettle supports in-place WebAssembly (WASM) contract upgrades on Soroban using the contract deployer's `update_current_contract_wasm` interface. In-place upgrades preserve the existing contract ID, token escrow balances, state indices, and historical shipment records.
+StellarSettle supports in-place WebAssembly (WASM) contract upgrades on Soroban using the contract deployer's `update_current_contract_wasm` interface. In-place upgrades preserve the existing contract ID, token escrow balances, state indices, and historical shipment records.
 
 `upgrade(admin: Address, new_wasm_hash: BytesN<32>)`
 Replaces the contract's executing WASM code in-place with the compiled WebAssembly module corresponding to `new_wasm_hash`.
@@ -2337,7 +2337,7 @@ Post-upgrade state migration entrypoint.
 
 - **Who can call:** Public / post-upgrade execution hook.
 - **What it does post-upgrade:** Called once immediately after a WASM bytecode upgrade to execute state schema transformations, re-key storage entries (e.g. migrating `V1_*` storage keys to `V2_*` schema), or set new storage defaults. As of #571 it also writes `StorageSchemaVersion` (currently `1`, matching `constants::STORAGE_SCHEMA_VERSION`) so integrators can read it via `storage_schema_version()`.
-- **Release process:** When shipping a release that changes on-disk layout, bump `version` in `contracts/chainsetttle/Cargo.toml`, keep `VERSION_MAJOR` / `VERSION_MINOR` / `VERSION_PATCH` in sync, bump `STORAGE_SCHEMA_VERSION`, and ensure `migrate` writes the new schema version.
+- **Release process:** When shipping a release that changes on-disk layout, bump `version` in `contracts/stellarsettle/Cargo.toml`, keep `VERSION_MAJOR` / `VERSION_MINOR` / `VERSION_PATCH` in sync, bump `STORAGE_SCHEMA_VERSION`, and ensure `migrate` writes the new schema version.
 - **Idempotency:** Safe to re-invoke; repeated calls keep the same schema version when unchanged.
 
 ---
@@ -2393,7 +2393,7 @@ Event name Payload When
 `arbiter_rotated` `(shipment_id)` topic, `new_arbiter` data Both parties agreed — arbiter replaced with `new_arbiter`
 `arbiter_recused` `(shipment_id)` topic, `(old_arbiter, new_arbiter)` data Arbiter voluntarily stepped down; replacement auto-assigned from pool
 
-The backend service (`chainsetttle-backend`) listens for these events and
+The backend service (`stellarsettle-backend`) listens for these events and
 sends push notifications to the relevant parties.
 
 ---
@@ -2417,28 +2417,22 @@ Code Meaning
 Project Structure
 
 ```
-chainsetttle-contract/
+stellarsettle/
 ├── Cargo.toml                         ← Rust workspace config
 ├── Cargo.lock
 ├── .gitignore
 ├── README.md                          ← this file
+├── docs/                              ← shared project documentation
 └── contracts/
-    └── chainsetttle/
-        ├── Cargo.toml                 ← contract package config
-        ├── Makefile                   ← build / deploy shortcuts
-        └── src/
-            ├── lib.rs                 ← main contract logic
-            ├── test.rs                ← test module orchestrator
-            ├── test_common.rs         ← shared test setup, fixtures, helpers
-            ├── test_shipment.rs       ← shipment lifecycle tests (create, confirm, cancel)
-            ├── test_dispute.rs        ← dispute workflow tests (raise, resolve, cooldown)
-            ├── test_admin.rs          ← admin control tests (pause, blacklist, settings)
-            ├── test_query.rs          ← read-only query tests (completion %)
-            ├── constants.rs           ← contract constants
-            ├── storage.rs             ← storage layer
-            ├── admin.rs               ← admin functions
-            ├── benchmarks.rs          ← performance benchmarks
-            └── [other test files]     ← edge cases, stress tests, advanced features
+  ├── stellarsettle/                 ← milestone escrow contract crate
+  │   ├── Cargo.toml
+  │   ├── Makefile                   ← contract build / deploy shortcuts
+  │   ├── src/
+  │   └── tests/
+  └── loan_manager/                  ← lending pool contract crate
+    ├── Cargo.toml
+    ├── Makefile
+    └── src/
 ```
 
 Test File Organization
@@ -2501,11 +2495,11 @@ Setup & Installation
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/chainsetttle-contract.git
-cd chainsetttle-contract
+git clone https://github.com/your-org/stellarsettle-contract.git
+cd stellarsettle-contract
 
-# Check all dependencies compile
-cargo check
+# Check every crate in the workspace
+cargo check --workspace
 ```
 
 ---
@@ -2513,17 +2507,18 @@ cargo check
 Running Tests
 
 ```bash
-# Run all unit tests
-cargo test
+# Run tests for every workspace crate
+cargo test --workspace
+
+# Run tests for one contract crate
+cargo test -p stellarsettle
+cargo test -p loan_manager
 
 # Run tests with output (useful for debugging)
-cargo test -- --nocapture
+cargo test --workspace -- --nocapture
 
-# Run a specific test
-cargo test test_full_shipment_lifecycle
-
-# Run with logs enabled
-cargo test --features testutils
+# Run a specific test in the escrow contract
+cargo test -p stellarsettle test_full_shipment_lifecycle
 ```
 
 Expected output:
@@ -2544,13 +2539,13 @@ test test::test_create_shipment_invalid_percentages ... ok
 Building
 
 ```bash
-# Build contract to .wasm
-make build
-# → target/wasm32v1-none/release/chainsetttle.wasm
+# Build the escrow contract to .wasm
+make -C contracts/stellarsettle build
+# → target/wasm32v1-none/release/stellarsettle.wasm
 
 # Optimize .wasm for production (smaller size = lower fees)
-make optimize
-# → target/wasm32v1-none/release/chainsetttle.optimized.wasm
+make -C contracts/stellarsettle optimize
+# → target/wasm32v1-none/release/stellarsettle.optimized.wasm
 ```
 
 Soroban contracts have a 64KB max size. The `optimize` step uses
@@ -2564,8 +2559,8 @@ Deploying to Testnet
 # Set your account name (created in Prerequisites step)
 export STELLAR_ACCOUNT=my-account
 
-# Deploy (uses optimized .wasm)
-make deploy-testnet
+# Deploy the escrow contract (uses its optimized .wasm)
+make -C contracts/stellarsettle deploy-testnet
 ```
 
 You'll get back a contract ID like:
@@ -2614,7 +2609,7 @@ Deploying to Mainnet
 ```bash
 # Fund a mainnet account first (you need XLM for fees)
 stellar contract deploy \
-  --wasm target/wasm32v1-none/release/chainsetttle.optimized.wasm \
+  --wasm target/wasm32v1-none/release/stellarsettle.optimized.wasm \
   --source my-account \
   --network mainnet
 ```
@@ -2645,8 +2640,8 @@ Roadmap
 [x] Partial cancellation (after some milestones confirmed) (#163)
 [x] Contract upgrade mechanism
 [ ] Mainnet deployment + verification
-[ ] Integration with `chainsetttle-backend` event listener
-[ ] Integration with `chainsetttle-frontend` Freighter wallet
+[ ] Integration with `stellarsettle-backend` event listener
+[ ] Integration with `stellarsettle-frontend` Freighter wallet
 
 ---
 

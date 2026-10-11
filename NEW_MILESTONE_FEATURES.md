@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes two new proposed features for the ChainSettle contract:
+This document describes two new proposed features for the StellarSettle contract:
 
 1. **Per-Milestone Insurance Holdback** - A configurable percentage of each milestone payment that is held back as insurance
 2. **Oracle Price Condition** - Gate milestone confirmation on an oracle price meeting a minimum threshold

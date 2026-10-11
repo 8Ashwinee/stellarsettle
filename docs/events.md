@@ -1,7 +1,7 @@
-# ChainSettle Event Schema
+# StellarSettle Event Schema
 
 This document describes the canonical, structured events emitted by the
-`ChainSettleContract` for consumption by off-chain indexers, the backend
+`StellarSettleContract` for consumption by off-chain indexers, the backend
 event listener, and dispute-resolution/audit tooling. These are emitted
 **in addition to** the more granular, per-function events already emitted
 throughout the contract (e.g. `held_payment_released`, `partial_dispute_raised`,
@@ -13,7 +13,7 @@ events.
 Every event uses the two-topic form:
 
 ```
-topics: (Symbol("chainsettle"), Symbol(<event_name>))
+topics: (Symbol("stellarsettle"), Symbol(<event_name>))
 data:   Map<Symbol, Val>
 ```
 
