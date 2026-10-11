@@ -5,11 +5,11 @@
 > **Milestone-based supply chain escrow on Stellar Soroban**
 > StellarSettle is a Soroban smart contract that locks buyer payment in escrow and automatically releases funds to the supplier as each delivery milestone is confirmed on-chain. No middlemen, no delayed wire transfers, no trust required.
 >
-> This repository is a Cargo workspace monorepo containing StellarSettle's Soroban contracts:
+> This repository is a monorepo containing StellarSettle's Soroban contracts and companion applications. The Rust contracts are the Cargo workspace members:
 > - `contracts/stellarsettle` — milestone-based supply chain escrow
 > - `contracts/loan_manager` — Soroban lending pool
->
-> The frontend and backend are companion integrations referenced below; they are not workspace members in this checkout.
+> - `backend` — Node.js Soroban RPC event monitor and shipment metadata API
+> - `frontend` — React dashboard with Freighter wallet integration
 
 Table of Contents
 How It Works
@@ -2423,6 +2423,12 @@ stellarsettle/
 ├── .gitignore
 ├── README.md                          ← this file
 ├── docs/                              ← shared project documentation
+├── backend/                           ← Node.js API and event monitor
+│   ├── src/
+│   └── .env.example
+├── frontend/                          ← React + Freighter operations dashboard
+│   ├── src/
+│   └── .env.example
 └── contracts/
   ├── stellarsettle/                 ← milestone escrow contract crate
   │   ├── Cargo.toml
@@ -2501,6 +2507,34 @@ cd stellarsettle-contract
 # Check every crate in the workspace
 cargo check --workspace
 ```
+
+### Frontend and Backend
+
+The applications have independent Node.js dependencies. Use Node.js 22.5 or newer.
+
+Configure and start the backend event API:
+
+```bash
+cp backend/.env.example backend/.env
+# Set STELLAR_CONTRACT_ID in backend/.env to the deployed contract ID.
+cd backend
+npm install
+npm run dev
+```
+
+In a second terminal, configure and start the dashboard:
+
+```bash
+cp frontend/.env.example frontend/.env.local
+# Set VITE_STELLAR_CONTRACT_ID to the same deployed contract ID.
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL (normally `http://localhost:5173`) and connect Freighter on the configured network. The dashboard reads shipment summaries from Soroban RPC, signs shipment metadata updates in the connected wallet, and displays `dispute_escalated` events from the backend's server-sent event stream. The backend's optional off-chain metadata write endpoint is separate and requires a server-only `METADATA_API_KEY`.
+
+Validate either application from its directory with `npm run typecheck` and `npm run build`.
 
 ---
 

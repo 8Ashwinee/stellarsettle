@@ -3,3 +3,10 @@
 *.optimized.wasm
 .stellar/
 **/test_snapshots/
+**/node_modules/
+**/dist/
+**/.env
+**/.env.local
+**/*.sqlite
+**/*.sqlite-shm
+**/*.sqlite-wal
