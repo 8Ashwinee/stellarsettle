@@ -18,7 +18,12 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
+import { appNetwork, configuredContractId, connectWallet, getShipment, getShipmentSummary, setShipmentMetadata, type Shipment, type ShipmentDetail, type Wallet } from "./lib/stellar";
+import { amount, errorMessage, shortAddress, statusLabel } from "./lib/format";
+import { CreateShipmentForm } from "./components/CreateShipmentForm";
+import { ProofSubmissionForm } from "./components/ProofSubmissionForm";
+import { DisputePanel } from "./components/DisputePanel";
+import { CancelShipmentForm } from "./components/CancelShipmentForm";
 
 type Escalation = {
   id: string;
@@ -32,23 +37,11 @@ type Escalation = {
 
 const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8787").replace(/\/$/, "");
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 5)}...${address.slice(-5)}`;
-}
-
-function amount(value?: string) {
-  if (!value) return "--";
-  try {
-    return new Intl.NumberFormat("en-US").format(BigInt(value));
-  } catch {
-    return value;
-  }
-}
-
 function App() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [detail, setDetail] = useState<ShipmentDetail | null>(null);
   const [events, setEvents] = useState<Escalation[]>([]);
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
@@ -92,20 +85,45 @@ function App() {
     }
   }
 
-  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!wallet || !shipmentId.trim()) return;
+  async function loadShipment(address: string, id: string) {
     setLoading(true);
-    setError("");
-    setNotice("");
     try {
-      setShipment(await getShipmentSummary(wallet.address, shipmentId.trim()));
+      const [summary, full] = await Promise.all([getShipmentSummary(address, id), getShipment(address, id)]);
+      setShipment(summary);
+      setDetail(full);
     } catch (cause) {
       setShipment(null);
-      setError(cause instanceof Error ? cause.message : "Unable to load shipment.");
+      setDetail(null);
+      setError(errorMessage(cause, "Unable to load shipment."));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!wallet || !shipmentId.trim()) return;
+    setError("");
+    setNotice("");
+    await loadShipment(wallet.address, shipmentId.trim());
+  }
+
+  function handleActionStart() {
+    setWriting(true);
+    setError("");
+    setNotice("");
+  }
+
+  function handleActionError(message: string) {
+    setWriting(false);
+    setError(message);
+  }
+
+  async function handleActionComplete(message: string, id: string) {
+    setWriting(false);
+    setNotice(message);
+    setShipmentId(id);
+    if (wallet) await loadShipment(wallet.address, id);
   }
 
   async function handleMetadata(event: React.FormEvent<HTMLFormElement>) {
@@ -121,7 +139,7 @@ function App() {
       setMetadataValue("");
       setShowMetadata(false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Metadata transaction failed.");
+      setError(errorMessage(cause, "Metadata transaction failed."));
     } finally {
       setWriting(false);
     }
@@ -233,6 +251,18 @@ function App() {
                   <input aria-label="Metadata value" placeholder="Value" value={metadataValue} onChange={(event) => setMetadataValue(event.target.value)} maxLength={1000} required />
                   <button className="primary-button" disabled={writing}>{writing ? <LoaderCircle className="spin" size={15} /> : <ArrowUpRight size={15} />}{writing ? "Signing" : "Sign & save"}</button>
                 </form>}
+                {detail && detail.id === shipment.id && <>
+                  <ol className="milestone-list" aria-label="Milestones">{detail.milestones.map((milestone) => <li key={milestone.index}>
+                    <span className="milestone-index">{milestone.index + 1}</span>
+                    <span className="milestone-copy"><strong>{milestone.name}</strong><small>{milestone.payment_percent}% of escrow{milestone.proof_hash ? ` · ${milestone.proof_hash}` : ""}</small></span>
+                    <span className={`status-pill ${milestone.status.toLowerCase()}`}><span />{statusLabel(milestone.status)}</span>
+                  </li>)}</ol>
+                  <div className="action-grid">
+                    <ProofSubmissionForm key={`proof-${detail.id}`} wallet={wallet} shipment={detail} onStart={handleActionStart} onSubmitted={(message) => handleActionComplete(message, detail.id)} onError={handleActionError} />
+                    <DisputePanel key={`dispute-${detail.id}`} wallet={wallet} shipment={detail} onStart={handleActionStart} onResolved={(message) => handleActionComplete(message, detail.id)} onError={handleActionError} />
+                    <CancelShipmentForm key={`cancel-${detail.id}`} wallet={wallet} shipment={detail} onStart={handleActionStart} onCancelled={(message) => handleActionComplete(message, detail.id)} onError={handleActionError} />
+                  </div>
+                </>}
               </div> : <div className="empty-shipment"><span className="empty-icon"><FileSearch size={23} /></span><strong>Shipment details appear here</strong><span>Look up a shipment ID to inspect escrow, milestone, and dispute status.</span></div>}
               <div className="panel-bottom-note"><span>Amounts shown in the token's smallest units.</span><a href={`https://stellar.expert/explorer/${appNetwork}/contract/${configuredContractId || ""}`} target="_blank" rel="noreferrer">View contract <ExternalLink size={13} /></a></div>
             </section>
@@ -251,10 +281,12 @@ function App() {
             </section>
           </div>
 
+          <CreateShipmentForm wallet={wallet} onStart={handleActionStart} onCreated={(id, hash) => handleActionComplete(`Shipment ${id} created · ${hash.slice(0, 12)}…`, id)} onError={handleActionError} />
+
           <section className="panel table-panel">
             <div className="panel-heading table-heading">
               <div><div className="section-kicker">RECENTLY VIEWED</div><h2>Shipment record</h2></div>
-              <button className="filter-button" onClick={() => { setShipment(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
+              <button className="filter-button" onClick={() => { setShipment(null); setDetail(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
             </div>
             <div className="table-wrap">
               <table>
