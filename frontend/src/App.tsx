@@ -14,11 +14,36 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   WalletCards,
   X,
 } from "lucide-react";
-import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
+import {
+  appNetwork,
+  batchCancelShipments,
+  batchConfirmMilestones,
+  configuredContractId,
+  connectWallet,
+  fileWarrantyClaim,
+  getReputation,
+  getShipmentDetail,
+  getShipmentSummary,
+  maxBatchCancel,
+  raiseDispute,
+  rateCounterparty,
+  resolveWarrantyClaim,
+  setShipmentMetadata,
+  type Reputation,
+  type Shipment,
+  type ShipmentDetail,
+  type Wallet,
+} from "./lib/stellar";
+import { BulkActionsToolbar } from "./components/BulkActionsToolbar";
+import { DisputeForm } from "./components/DisputeForm";
+import { RatingPrompt } from "./components/RatingPrompt";
+import { StatusPill } from "./components/StatusPill";
+import { WarrantyPanel } from "./components/WarrantyPanel";
 
 type Escalation = {
   id: string;
@@ -45,10 +70,23 @@ function amount(value?: string) {
   }
 }
 
+function errorMessage(cause: unknown, fallback: string) {
+  return cause instanceof Error ? cause.message : fallback;
+}
+
+const eventLabels: Record<string, string> = {
+  dispute_escalated: "Dispute escalated",
+  dispute_raised: "Dispute raised",
+};
+
 function App() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [detail, setDetail] = useState<ShipmentDetail | null>(null);
+  const [reputation, setReputation] = useState<Reputation | null>(null);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [events, setEvents] = useState<Escalation[]>([]);
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
@@ -58,6 +96,7 @@ function App() {
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
   const [metadataValue, setMetadataValue] = useState("");
+  const [showDispute, setShowDispute] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -92,20 +131,147 @@ function App() {
     }
   }
 
-  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!wallet || !shipmentId.trim()) return;
+  function upsertRows(updated: Shipment[]) {
+    setShipments((current) => {
+      const byId = new Map(updated.map((row) => [row.id, row]));
+      const kept = current.map((row) => byId.get(row.id) ?? row);
+      const added = updated.filter((row) => !current.some((existing) => existing.id === row.id));
+      return [...added, ...kept];
+    });
+  }
+
+  async function loadShipment(address: string, id: string) {
+    const [summary, nextDetail] = await Promise.all([getShipmentSummary(address, id), getShipmentDetail(address, id)]);
+    const isSupplier = summary.supplier === address;
+    const isParty = isSupplier || nextDetail.buyers.includes(address);
+    const counterparty = isSupplier ? nextDetail.buyers[0] : summary.supplier;
+    setShipment(summary);
+    setDetail(nextDetail);
+    upsertRows([summary]);
+    setReputation(isParty && counterparty ? await getReputation(address, counterparty, !isSupplier).catch(() => null) : null);
+  }
+
+  async function refreshRows(ids: string[]) {
+    if (!wallet) return;
+    const results = await Promise.allSettled(ids.map((id) => getShipmentSummary(wallet.address, id)));
+    upsertRows(results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []));
+    if (shipment && ids.includes(shipment.id)) await loadShipment(wallet.address, shipment.id).catch(() => undefined);
+  }
+
+  async function openShipment(id: string) {
+    if (!wallet) return;
     setLoading(true);
     setError("");
     setNotice("");
+    setShowDispute(false);
     try {
-      setShipment(await getShipmentSummary(wallet.address, shipmentId.trim()));
+      await loadShipment(wallet.address, id);
     } catch (cause) {
       setShipment(null);
-      setError(cause instanceof Error ? cause.message : "Unable to load shipment.");
+      setDetail(null);
+      setReputation(null);
+      setError(errorMessage(cause, "Unable to load shipment."));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!wallet || !shipmentId.trim()) return;
+    await openShipment(shipmentId.trim());
+  }
+
+  /** Runs a signed contract call with the dashboard's shared loading/toast handling. */
+  async function runWrite(action: (wallet: Wallet) => Promise<string>, success: string, fallback: string, refreshIds: string[]): Promise<boolean> {
+    if (!wallet) return false;
+    setWriting(true);
+    setError("");
+    setNotice("");
+    try {
+      const hash = await action(wallet);
+      setNotice(`${success} · ${hash.slice(0, 12)}…`);
+      await refreshRows(refreshIds);
+      return true;
+    } catch (cause) {
+      setError(errorMessage(cause, fallback));
+      return false;
+    } finally {
+      setWriting(false);
+    }
+  }
+
+  async function handleDispute(milestoneIndex: number, reason: string) {
+    if (!shipment) return false;
+    const id = shipment.id;
+    const ok = await runWrite((signer) => raiseDispute(signer, id, milestoneIndex, reason), `Dispute raised on milestone ${milestoneIndex + 1}`, "Dispute transaction failed.", [id]);
+    if (ok) setShowDispute(false);
+    return ok;
+  }
+
+  async function handleWarrantyClaim(evidence: string) {
+    if (!shipment) return false;
+    const id = shipment.id;
+    return runWrite((signer) => fileWarrantyClaim(signer, id, evidence), "Warranty claim filed", "Warranty claim transaction failed.", [id]);
+  }
+
+  async function handleWarrantyResolution(refundBuyer: boolean) {
+    if (!shipment) return false;
+    const id = shipment.id;
+    return runWrite((signer) => resolveWarrantyClaim(signer, id, refundBuyer), refundBuyer ? "Warranty claim refunded to buyer" : "Warranty claim dismissed", "Warranty resolution transaction failed.", [id]);
+  }
+
+  async function handleRating(stars: number) {
+    if (!shipment) return false;
+    const id = shipment.id;
+    return runWrite((signer) => rateCounterparty(signer, id, stars), `Rated counterparty ${stars}/5`, "Rating transaction failed.", [id]);
+  }
+
+  async function handleBulkConfirm() {
+    if (!wallet || !selectedIds.length) return false;
+    const ids = [...selectedIds];
+    setWriting(true);
+    setError("");
+    setNotice("");
+    const confirmed: string[] = [];
+    const skipped: string[] = [];
+    const failed: string[] = [];
+    // Soroban allows one contract call per transaction, so each shipment is its own batch.
+    for (const id of ids) {
+      try {
+        const { milestones } = await getShipmentDetail(wallet.address, id);
+        const indices = milestones.flatMap((milestone, index) => milestone.status === "ProofSubmitted" ? [index] : []);
+        if (!indices.length) {
+          skipped.push(id);
+          continue;
+        }
+        await batchConfirmMilestones(wallet, id, indices);
+        confirmed.push(id);
+      } catch (cause) {
+        failed.push(`${id}: ${errorMessage(cause, "confirm failed")}`);
+      }
+    }
+    await refreshRows(ids);
+    setWriting(false);
+    const summary = `Confirmed milestones on ${confirmed.length} shipment${confirmed.length === 1 ? "" : "s"}${skipped.length ? ` · ${skipped.length} had nothing to confirm` : ""}`;
+    if (failed.length) {
+      setError(`${summary} · ${failed.length} failed — ${failed.join("; ")}`);
+      return false;
+    }
+    setNotice(summary);
+    setSelectedIds([]);
+    return true;
+  }
+
+  async function handleBulkCancel(reason: string) {
+    const ids = [...selectedIds];
+    const ok = await runWrite((signer) => batchCancelShipments(signer, ids, reason), `Cancelled ${ids.length} shipment${ids.length === 1 ? "" : "s"}`, "Batch cancel transaction failed.", ids);
+    if (ok) setSelectedIds([]);
+    return ok;
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
   async function handleMetadata(event: React.FormEvent<HTMLFormElement>) {
@@ -128,6 +294,21 @@ function App() {
   }
 
   const status = shipment?.status ?? "Waiting for lookup";
+  const isBuyer = Boolean(wallet && detail?.buyers.includes(wallet.address));
+  const isSupplier = Boolean(wallet && shipment && shipment.supplier === wallet.address);
+  const isArbiter = Boolean(wallet && detail && detail.arbiter === wallet.address);
+  const alreadyRated = Boolean(wallet && detail?.audit_log.some((entry) => entry.action === "counterparty_rated" && entry.caller === wallet.address));
+  const disputeActivity: Escalation[] = shipment && detail ? detail.milestones.flatMap((milestone, index) => milestone.status === "Disputed" ? [{
+    id: `${shipment.id}:${index}:dispute_raised`,
+    ledger: Number(milestone.dispute_opened_ledger ?? 0),
+    type: "dispute_raised",
+    shipmentId: shipment.id,
+    milestoneIndex: index,
+    openedLedger: Number(milestone.dispute_opened_ledger ?? 0),
+    currentLedger: Number(milestone.dispute_opened_ledger ?? 0),
+  }] : []) : [];
+  const activity = [...disputeActivity, ...events];
+  const allSelected = shipments.length > 0 && shipments.every((row) => selectedIds.includes(row.id));
 
   return (
     <div className="app-shell">
@@ -144,8 +325,8 @@ function App() {
         <div className="nav-label">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Primary navigation">
           <a className="nav-item active" href="#overview"><LayoutDashboard size={17} />Overview</a>
-          <a className="nav-item" href="#shipment"><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
-          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className="nav-item" href="#shipment"><FileSearch size={17} />Shipments<span className="nav-count">{shipments.length}</span></a>
+          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{activity.length > 0 && <span className="nav-count alert-count">{activity.length}</span>}</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="network-card">
@@ -220,19 +401,27 @@ function App() {
               </form>
               {!wallet && <div className="inline-callout"><WalletCards size={16} /><span>Connect Freighter to query public contract data and submit authorized transactions.</span><button onClick={handleConnect}>Connect</button></div>}
               {shipment ? <div className="shipment-detail">
-                <div className="detail-topline"><div className="shipment-ref"><span className="shipment-icon"><FileSearch size={18} /></span><span><strong>{shipment.id}</strong><small>Created at ledger {shipment.created_at.toLocaleString()}</small></span></div><span className={`status-pill ${status.toLowerCase()}`}><span />{status}</span></div>
+                <div className="detail-topline"><div className="shipment-ref"><span className="shipment-icon"><FileSearch size={18} /></span><span><strong>{shipment.id}</strong><small>Created at ledger {shipment.created_at.toLocaleString()}</small></span></div><StatusPill status={status} /></div>
                 <div className="detail-grid">
                   <div><span>ESCROW TOTAL</span><strong>{amount(shipment.total_amount)} <small>units</small></strong></div>
                   <div><span>RELEASED</span><strong>{amount(shipment.released_amount)} <small>units</small></strong></div>
                   <div><span>MILESTONES</span><strong>{shipment.milestone_count}</strong></div>
                   <div><span>OPEN DISPUTES</span><strong className={shipment.open_disputes ? "text-coral" : ""}>{shipment.open_disputes}</strong></div>
                 </div>
-                <div className="detail-footer"><span>Supplier <code>{shortAddress(shipment.supplier)}</code><span className="footer-sep"> · </span>Token <code>{shortAddress(shipment.token)}</code></span><button className="text-button" onClick={() => setShowMetadata((shown) => !shown)}><Plus size={15} />Add metadata</button></div>
+                <div className="detail-footer"><span>Supplier <code>{shortAddress(shipment.supplier)}</code><span className="footer-sep"> · </span>Token <code>{shortAddress(shipment.token)}</code></span><span className="detail-actions">{isBuyer && status === "Active" && <button className="text-button danger-text" onClick={() => setShowDispute((shown) => !shown)}><ShieldAlert size={15} />Raise dispute</button>}<button className="text-button" onClick={() => setShowMetadata((shown) => !shown)}><Plus size={15} />Add metadata</button></span></div>
                 {showMetadata && <form className="metadata-form" onSubmit={handleMetadata}>
                   <input aria-label="Metadata key" placeholder="Key (e.g. po_number)" value={metadataKey} onChange={(event) => setMetadataKey(event.target.value)} pattern="[a-zA-Z0-9_]{1,32}" required />
                   <input aria-label="Metadata value" placeholder="Value" value={metadataValue} onChange={(event) => setMetadataValue(event.target.value)} maxLength={1000} required />
                   <button className="primary-button" disabled={writing}>{writing ? <LoaderCircle className="spin" size={15} /> : <ArrowUpRight size={15} />}{writing ? "Signing" : "Sign & save"}</button>
                 </form>}
+                {showDispute && detail && <DisputeForm milestones={detail.milestones} busy={writing} onSubmit={handleDispute} />}
+                {detail && detail.milestones.length > 0 && <ol className="milestone-list" aria-label="Milestones">{detail.milestones.map((milestone, index) => <li key={index} className={milestone.status === "Disputed" ? "milestone-disputed" : ""}>
+                  <span className="milestone-index">{index + 1}</span>
+                  <span className="milestone-copy"><strong>{milestone.name}</strong><small>{milestone.payment_percent}% of escrow</small></span>
+                  <StatusPill status={milestone.status} />
+                </li>)}</ol>}
+                {detail && <WarrantyPanel warranty={detail.warranty} shipmentStatus={status} isBuyer={isBuyer} isArbiter={isArbiter} busy={writing} onFile={handleWarrantyClaim} onResolve={handleWarrantyResolution} />}
+                {detail && status === "Completed" && (isBuyer || isSupplier) && <RatingPrompt counterpartyLabel={isSupplier ? "buyer" : "supplier"} reputation={reputation} alreadyRated={alreadyRated} busy={writing} onRate={handleRating} />}
               </div> : <div className="empty-shipment"><span className="empty-icon"><FileSearch size={23} /></span><strong>Shipment details appear here</strong><span>Look up a shipment ID to inspect escrow, milestone, and dispute status.</span></div>}
               <div className="panel-bottom-note"><span>Amounts shown in the token's smallest units.</span><a href={`https://stellar.expert/explorer/${appNetwork}/contract/${configuredContractId || ""}`} target="_blank" rel="noreferrer">View contract <ExternalLink size={13} /></a></div>
             </section>
@@ -242,9 +431,9 @@ function App() {
                 <div><div className="section-kicker">EVENT MONITOR</div><h2>Dispute activity</h2></div>
                 <button className="icon-button refresh-button" title="Refresh events" onClick={() => fetch(`${backendUrl}/api/events?limit=8`).then((response) => response.json()).then(setEvents).catch(() => setError("Could not refresh backend events."))}><RefreshCw size={16} /></button>
               </div>
-              {events.length ? <div className="event-list">{events.map((event) => <article className="event-row" key={event.id}>
-                <span className="event-mark"><ShieldCheck size={15} /></span>
-                <span className="event-copy"><strong>Dispute escalated</strong><small>{event.shipmentId} · Milestone {event.milestoneIndex + 1}</small></span>
+              {activity.length ? <div className="event-list">{activity.map((event) => <article className={`event-row ${event.type}`} key={event.id}>
+                <span className="event-mark">{event.type === "dispute_raised" ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />}</span>
+                <span className="event-copy"><strong>{eventLabels[event.type] ?? "Dispute escalated"}</strong><small>{event.shipmentId} · Milestone {event.milestoneIndex + 1}</small></span>
                 <span className="event-ledger">L{event.ledger.toLocaleString()}</span>
               </article>)}</div> : <div className="empty-events"><span className="empty-icon subtle-icon"><Bell size={21} /></span><strong>No escalation events</strong><span>New contract alerts will appear here in real time.</span></div>}
               <div className="activity-footer"><span className="stream-dot" />Listening for dispute_escalated<span className="stream-status">{apiState === "online" ? "Connected" : "Offline"}</span></div>
@@ -253,13 +442,14 @@ function App() {
 
           <section className="panel table-panel">
             <div className="panel-heading table-heading">
-              <div><div className="section-kicker">RECENTLY VIEWED</div><h2>Shipment record</h2></div>
-              <button className="filter-button" onClick={() => { setShipment(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
+              <div><div className="section-kicker">RECENTLY VIEWED</div><h2>Shipment records</h2></div>
+              <button className="filter-button" onClick={() => { setShipment(null); setDetail(null); setReputation(null); setShipments([]); setSelectedIds([]); setShipmentId(""); setShowDispute(false); }}>Clear view <X size={14} /></button>
             </div>
+            <BulkActionsToolbar selectedCount={selectedIds.length} maxCancel={maxBatchCancel} busy={writing} onConfirm={handleBulkConfirm} onCancel={handleBulkCancel} onClear={() => setSelectedIds([])} />
             <div className="table-wrap">
               <table>
-                <thead><tr><th>SHIPMENT</th><th>STATUS</th><th>ESCROW</th><th>MILESTONES</th><th>DISPUTES</th><th>CREATED LEDGER</th></tr></thead>
-                <tbody>{shipment ? <tr><td><span className="table-id"><span className="table-file"><FileSearch size={14} /></span>{shipment.id}</span></td><td><span className={`status-pill ${status.toLowerCase()}`}><span />{status}</span></td><td>{amount(shipment.total_amount)} <span className="muted">units</span></td><td>{shipment.milestone_count}</td><td>{shipment.open_disputes > 0 ? <span className="dispute-count">{shipment.open_disputes} open</span> : "None"}</td><td>{shipment.created_at.toLocaleString()}</td></tr> : <tr><td colSpan={6} className="table-empty">No shipment loaded. Search above to view a contract record.</td></tr>}</tbody>
+                <thead><tr><th className="select-cell"><input type="checkbox" aria-label="Select all shipments" checked={allSelected} disabled={!shipments.length || writing} onChange={() => setSelectedIds(allSelected ? [] : shipments.map((row) => row.id))} /></th><th>SHIPMENT</th><th>STATUS</th><th>ESCROW</th><th>MILESTONES</th><th>DISPUTES</th><th>CREATED LEDGER</th></tr></thead>
+                <tbody>{shipments.length ? shipments.map((row) => <tr key={row.id} className={selectedIds.includes(row.id) ? "row-selected" : ""}><td className="select-cell"><input type="checkbox" aria-label={`Select shipment ${row.id}`} checked={selectedIds.includes(row.id)} disabled={writing} onChange={() => toggleSelected(row.id)} /></td><td><button className="table-id table-link" onClick={() => openShipment(row.id)}><span className="table-file"><FileSearch size={14} /></span>{row.id}</button></td><td><StatusPill status={row.status} /></td><td>{amount(row.total_amount)} <span className="muted">units</span></td><td>{row.milestone_count}</td><td>{row.open_disputes > 0 ? <span className="dispute-count">{row.open_disputes} open</span> : "None"}</td><td>{row.created_at.toLocaleString()}</td></tr>) : <tr><td colSpan={7} className="table-empty">No shipment loaded. Search above to view a contract record.</td></tr>}</tbody>
               </table>
             </div>
           </section>
