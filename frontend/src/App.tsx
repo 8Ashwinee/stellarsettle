@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   ArrowDownLeft,
@@ -13,12 +13,18 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  Repeat,
   Search,
   ShieldCheck,
   WalletCards,
   X,
 } from "lucide-react";
-import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
+import { appNetwork, configuredContractId, connectWallet, getShipmentDetail, getShipmentSummary, setShipmentMetadata, type Shipment, type ShipmentDetail, type Wallet } from "./lib/stellar";
+import { AdvancePayments } from "./components/AdvancePayments";
+import { ExtensionWorkflow } from "./components/ExtensionWorkflow";
+import { MilestoneConfirmation } from "./components/MilestoneConfirmation";
+import { StandingOrdersPage } from "./components/StandingOrdersPage";
+import { amount, shortAddress } from "./components/shared";
 
 type Escalation = {
   id: string;
@@ -32,23 +38,20 @@ type Escalation = {
 
 const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8787").replace(/\/$/, "");
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 5)}...${address.slice(-5)}`;
-}
+type Page = "overview" | "standing-orders";
 
-function amount(value?: string) {
-  if (!value) return "--";
-  try {
-    return new Intl.NumberFormat("en-US").format(BigInt(value));
-  } catch {
-    return value;
-  }
+const standingOrdersPath = "/standing-orders";
+
+function currentPage(): Page {
+  return window.location.pathname.replace(/\/$/, "") === standingOrdersPath ? "standing-orders" : "overview";
 }
 
 function App() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [detail, setDetail] = useState<ShipmentDetail | null>(null);
+  const [page, setPage] = useState<Page>(currentPage);
   const [events, setEvents] = useState<Escalation[]>([]);
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
@@ -82,6 +85,18 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const syncPage = () => setPage(currentPage());
+    window.addEventListener("popstate", syncPage);
+    return () => window.removeEventListener("popstate", syncPage);
+  }, []);
+
+  function navigate(event: React.MouseEvent<HTMLAnchorElement>, path: string) {
+    event.preventDefault();
+    window.history.pushState(null, "", path);
+    setPage(currentPage());
+  }
+
   async function handleConnect() {
     setError("");
     try {
@@ -99,14 +114,35 @@ function App() {
     setError("");
     setNotice("");
     try {
-      setShipment(await getShipmentSummary(wallet.address, shipmentId.trim()));
+      const [summary, full] = await Promise.all([
+        getShipmentSummary(wallet.address, shipmentId.trim()),
+        getShipmentDetail(wallet.address, shipmentId.trim()),
+      ]);
+      setShipment(summary);
+      setDetail(full);
     } catch (cause) {
       setShipment(null);
+      setDetail(null);
       setError(cause instanceof Error ? cause.message : "Unable to load shipment.");
     } finally {
       setLoading(false);
     }
   }
+
+  // Re-reads the loaded shipment after a workflow transaction so status and released totals stay current.
+  const refreshShipment = useCallback(async () => {
+    if (!wallet || !shipment) return;
+    try {
+      const [summary, full] = await Promise.all([
+        getShipmentSummary(wallet.address, shipment.id),
+        getShipmentDetail(wallet.address, shipment.id),
+      ]);
+      setShipment(summary);
+      setDetail(full);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to refresh shipment.");
+    }
+  }, [wallet, shipment]);
 
   async function handleMetadata(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -128,6 +164,11 @@ function App() {
   }
 
   const status = shipment?.status ?? "Waiting for lookup";
+  // Approved advances are paid out before milestone confirmation, so count them as released.
+  const released = shipment && detail
+    ? (BigInt(detail.released_amount) + BigInt(detail.total_advanced_amount)).toString()
+    : shipment?.released_amount;
+  const toast = (error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`} role="status">{error ? <X size={16} /> : <Check size={16} />}{error || notice}<button className="icon-button" onClick={() => { setError(""); setNotice(""); }} aria-label="Dismiss"><X size={15} /></button></div>;
 
   return (
     <div className="app-shell">
@@ -143,9 +184,10 @@ function App() {
         </div>
         <div className="nav-label">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Primary navigation">
-          <a className="nav-item active" href="#overview"><LayoutDashboard size={17} />Overview</a>
-          <a className="nav-item" href="#shipment"><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
-          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className={`nav-item ${page === "overview" ? "active" : ""}`} href="/" onClick={(event) => navigate(event, "/")}><LayoutDashboard size={17} />Overview</a>
+          <a className="nav-item" href="/#shipment" onClick={(event) => page !== "overview" && navigate(event, "/#shipment")}><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
+          <a className="nav-item" href="/#activity" onClick={(event) => page !== "overview" && navigate(event, "/#activity")}><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className={`nav-item ${page === "standing-orders" ? "active" : ""}`} href={standingOrdersPath} onClick={(event) => navigate(event, standingOrdersPath)}><Repeat size={17} />Standing orders</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="network-card">
@@ -163,7 +205,7 @@ function App() {
 
       <main className="main-area" id="overview">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>Overview</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{page === "standing-orders" ? "Standing orders" : "Overview"}</strong></div>
           <div className="top-actions">
             <span className={`backend-indicator ${apiState}`}><span />API {apiState === "online" ? "connected" : apiState === "offline" ? "offline" : "checking"}</span>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} />{events.length > 0 && <i />}</button>
@@ -174,6 +216,10 @@ function App() {
         </header>
 
         <div className="page-content">
+          {page === "standing-orders" ? <>
+          {toast}
+          <StandingOrdersPage wallet={wallet} onConnect={handleConnect} onError={setError} onNotice={setNotice} />
+          </> : <>
           <section className="page-heading">
             <div>
               <div className="eyebrow"><span className="eyebrow-rule" />OPERATIONS</div>
@@ -192,7 +238,7 @@ function App() {
             <article className="metric">
               <div className="metric-top"><span>Escrow value</span><span className="metric-icon blue-icon"><ArrowDownLeft size={16} /></span></div>
               <div className="metric-value">{shipment ? amount(shipment.total_amount) : "—"}<small>{shipment ? "base units" : "Awaiting data"}</small></div>
-              <div className="metric-foot">{shipment ? `${amount(shipment.released_amount)} released` : "Connect and look up a shipment"}</div>
+              <div className="metric-foot">{shipment ? `${amount(released)} released` : "Connect and look up a shipment"}</div>
             </article>
             <article className="metric">
               <div className="metric-top"><span>Open disputes</span><span className="metric-icon coral-icon"><ShieldCheck size={16} /></span></div>
@@ -206,7 +252,7 @@ function App() {
             </article>
           </section>
 
-          {(error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`} role="status">{error ? <X size={16} /> : <Check size={16} />}{error || notice}<button className="icon-button" onClick={() => { setError(""); setNotice(""); }} aria-label="Dismiss"><X size={15} /></button></div>}
+          {toast}
 
           <div className="content-grid">
             <section className="panel shipment-panel" id="shipment">
@@ -223,7 +269,7 @@ function App() {
                 <div className="detail-topline"><div className="shipment-ref"><span className="shipment-icon"><FileSearch size={18} /></span><span><strong>{shipment.id}</strong><small>Created at ledger {shipment.created_at.toLocaleString()}</small></span></div><span className={`status-pill ${status.toLowerCase()}`}><span />{status}</span></div>
                 <div className="detail-grid">
                   <div><span>ESCROW TOTAL</span><strong>{amount(shipment.total_amount)} <small>units</small></strong></div>
-                  <div><span>RELEASED</span><strong>{amount(shipment.released_amount)} <small>units</small></strong></div>
+                  <div><span>RELEASED</span><strong>{amount(released)} <small>units</small></strong></div>
                   <div><span>MILESTONES</span><strong>{shipment.milestone_count}</strong></div>
                   <div><span>OPEN DISPUTES</span><strong className={shipment.open_disputes ? "text-coral" : ""}>{shipment.open_disputes}</strong></div>
                 </div>
@@ -251,10 +297,16 @@ function App() {
             </section>
           </div>
 
+          {shipment && detail && <div className="workflow-grid">
+            <MilestoneConfirmation wallet={wallet} shipment={detail} onUpdated={refreshShipment} onError={setError} onNotice={setNotice} />
+            <ExtensionWorkflow wallet={wallet} shipment={detail} onUpdated={refreshShipment} onError={setError} onNotice={setNotice} />
+            <AdvancePayments wallet={wallet} shipment={detail} onUpdated={refreshShipment} onError={setError} onNotice={setNotice} />
+          </div>}
+
           <section className="panel table-panel">
             <div className="panel-heading table-heading">
               <div><div className="section-kicker">RECENTLY VIEWED</div><h2>Shipment record</h2></div>
-              <button className="filter-button" onClick={() => { setShipment(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
+              <button className="filter-button" onClick={() => { setShipment(null); setDetail(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
             </div>
             <div className="table-wrap">
               <table>
@@ -263,6 +315,7 @@ function App() {
               </table>
             </div>
           </section>
+          </>}
 
           <footer className="page-footer"><span>StellarSettle operations · Soroban contract interface</span><span><span className="footer-live" />{appNetwork} <span className="footer-sep">·</span> Contract {configuredContractId ? shortAddress(configuredContractId) : "not configured"}</span></footer>
         </div>
