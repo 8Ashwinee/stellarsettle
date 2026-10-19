@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileSearch,
   LayoutDashboard,
+  Landmark,
   LoaderCircle,
   Plus,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import LendingPage from "./LendingPage";
 import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
 
 type Escalation = {
@@ -46,6 +48,8 @@ function amount(value?: string) {
 }
 
 function App() {
+  const [pathname, setPathname] = useState(window.location.pathname);
+  const isLending = pathname.replace(/\/$/, "") === "/lending";
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
@@ -58,6 +62,25 @@ function App() {
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
   const [metadataValue, setMetadataValue] = useState("");
+
+  useEffect(() => {
+    const updatePath = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", updatePath);
+    return () => window.removeEventListener("popstate", updatePath);
+  }, []);
+
+  function navigate(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.history.pushState(null, "", event.currentTarget.href);
+    setPathname(window.location.pathname);
+    if (window.location.hash) {
+      const targetId = window.location.hash.slice(1);
+      window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth" }));
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -143,9 +166,10 @@ function App() {
         </div>
         <div className="nav-label">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Primary navigation">
-          <a className="nav-item active" href="#overview"><LayoutDashboard size={17} />Overview</a>
-          <a className="nav-item" href="#shipment"><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
-          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className={`nav-item ${!isLending ? "active" : ""}`} href="/" onClick={navigate}><LayoutDashboard size={17} />Overview</a>
+          <a className="nav-item" href="/#shipment" onClick={navigate}><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
+          <a className="nav-item" href="/#activity" onClick={navigate}><Activity size={17} />Activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className={`nav-item ${isLending ? "active" : ""}`} href="/lending" onClick={navigate}><Landmark size={17} />Lending</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="network-card">
@@ -161,9 +185,9 @@ function App() {
         </div>
       </aside>
 
-      <main className="main-area" id="overview">
+      <main className="main-area" id={isLending ? "lending" : "overview"}>
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>Overview</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isLending ? "Lending" : "Overview"}</strong></div>
           <div className="top-actions">
             <span className={`backend-indicator ${apiState}`}><span />API {apiState === "online" ? "connected" : apiState === "offline" ? "offline" : "checking"}</span>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} />{events.length > 0 && <i />}</button>
@@ -174,6 +198,7 @@ function App() {
         </header>
 
         <div className="page-content">
+          {isLending ? <LendingPage wallet={wallet} onConnect={handleConnect} /> : <>
           <section className="page-heading">
             <div>
               <div className="eyebrow"><span className="eyebrow-rule" />OPERATIONS</div>
@@ -265,6 +290,7 @@ function App() {
           </section>
 
           <footer className="page-footer"><span>StellarSettle operations · Soroban contract interface</span><span><span className="footer-live" />{appNetwork} <span className="footer-sep">·</span> Contract {configuredContractId ? shortAddress(configuredContractId) : "not configured"}</span></footer>
+          </>}
         </div>
       </main>
     </div>
