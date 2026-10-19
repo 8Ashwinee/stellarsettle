@@ -17,6 +17,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import { clearLastShipmentId, loadLastShipmentId, saveLastShipmentId } from "./hooks/lastShipmentStorage";
 import { useNotifier } from "./components/ToastProvider";
 import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
 
@@ -47,7 +48,7 @@ function amount(value?: string) {
 
 function App() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [shipmentId, setShipmentId] = useState("");
+  const [shipmentId, setShipmentId] = useState(loadLastShipmentId);
   const [shipment, setShipment] = useState<Shipment | null>(null);
   const [events, setEvents] = useState<Escalation[]>([]);
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
@@ -81,6 +82,19 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    // Restore the last-viewed shipment once a wallet is available.
+    const saved = loadLastShipmentId();
+    if (!wallet || !saved) return;
+    let cancelled = false;
+    setLoading(true);
+    getShipmentSummary(wallet.address, saved)
+      .then((result) => { if (!cancelled) setShipment(result); })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [wallet]);
+
   async function handleConnect() {
     setError("");
     try {
@@ -99,6 +113,7 @@ function App() {
     setNotice("");
     try {
       setShipment(await getShipmentSummary(wallet.address, shipmentId.trim()));
+      saveLastShipmentId(shipmentId.trim());
     } catch (cause) {
       setShipment(null);
       setError(cause instanceof Error ? cause.message : "Unable to load shipment.");
@@ -252,7 +267,7 @@ function App() {
           <section className="panel table-panel">
             <div className="panel-heading table-heading">
               <div><div className="section-kicker">RECENTLY VIEWED</div><h2>Shipment record</h2></div>
-              <button className="filter-button" onClick={() => { setShipment(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
+              <button className="filter-button" onClick={() => { setShipment(null); setShipmentId(""); clearLastShipmentId(); }}>Clear view <X size={14} /></button>
             </div>
             <div className="table-wrap">
               <table>
