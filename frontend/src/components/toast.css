@@ -1,0 +1,6 @@
+.toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; max-width: min(420px, calc(100vw - 40px)); }
+.toast-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #fff; color: #14213d; border: 1px solid #d5dbe5; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); font-size: 14px; }
+.toast-item-error { border-color: #e5484d; }
+.toast-item-success { border-color: #30a46c; }
+.toast-message { flex: 1; overflow-wrap: anywhere; }
+.toast-dismiss { display: inline-flex; background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; }

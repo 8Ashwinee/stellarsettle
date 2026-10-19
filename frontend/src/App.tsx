@@ -4,7 +4,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Bell,
-  Check,
   ChevronDown,
   CircleHelp,
   ExternalLink,
@@ -18,6 +17,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import { useNotifier } from "./components/ToastProvider";
 import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
 
 type Escalation = {
@@ -53,8 +53,7 @@ function App() {
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
   const [writing, setWriting] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const { setError, setNotice } = useNotifier();
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
   const [metadataValue, setMetadataValue] = useState("");
@@ -206,7 +205,6 @@ function App() {
             </article>
           </section>
 
-          {(error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`} role="status">{error ? <X size={16} /> : <Check size={16} />}{error || notice}<button className="icon-button" onClick={() => { setError(""); setNotice(""); }} aria-label="Dismiss"><X size={15} /></button></div>}
 
           <div className="content-grid">
             <section className="panel shipment-panel" id="shipment">
