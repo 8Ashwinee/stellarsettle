@@ -7,13 +7,15 @@ import {
   rpc,
   scValToNative,
 } from "@stellar/stellar-sdk";
+import { getInitialNetwork, networkConfigs, rememberNetwork, type NetworkName } from "./networks";
 import { getWalletAdapter, type WalletId } from "./wallets";
 
-const network = import.meta.env.VITE_STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
-const rpcUrl = import.meta.env.VITE_STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
-const passphrase = network === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
-const contractId = import.meta.env.VITE_STELLAR_CONTRACT_ID as string;
-const server = new rpc.Server(rpcUrl);
+const initialConfig = networkConfigs[getInitialNetwork()];
+let network: NetworkName = initialConfig.name;
+let rpcUrl = initialConfig.rpcUrl;
+let passphrase = initialConfig.passphrase;
+let contractId = initialConfig.contractId;
+let server = new rpc.Server(rpcUrl);
 
 export type Wallet = { address: string; network: string; networkPassphrase: string; walletId?: WalletId };
 export type Shipment = {
@@ -100,5 +102,18 @@ export async function setShipmentMetadata(
   throw new Error(`Transaction ${submitted.hash} is still pending. Check it on Stellar Expert.`);
 }
 
-export const appNetwork = network;
-export const configuredContractId = contractId;
+export let appNetwork = network;
+export let configuredContractId = contractId;
+
+/** Switch the active network at runtime (no reload). Callers should reconnect the wallet and re-query. */
+export function setActiveNetwork(name: NetworkName) {
+  const config = networkConfigs[name];
+  network = name;
+  rpcUrl = config.rpcUrl;
+  passphrase = config.passphrase;
+  contractId = config.contractId;
+  server = new rpc.Server(rpcUrl);
+  appNetwork = network;
+  configuredContractId = contractId;
+  rememberNetwork(name);
+}

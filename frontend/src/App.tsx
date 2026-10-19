@@ -18,10 +18,12 @@ import {
   X,
 } from "lucide-react";
 import { clearLastShipmentId, loadLastShipmentId, saveLastShipmentId } from "./hooks/lastShipmentStorage";
+import { NetworkSwitcher } from "./components/NetworkSwitcher";
 import { WalletModal } from "./components/WalletModal";
 import type { WalletId } from "./lib/wallets";
+import type { NetworkName } from "./lib/networks";
 import { useNotifier } from "./components/ToastProvider";
-import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
+import { appNetwork, configuredContractId, connectWallet, setActiveNetwork, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
 
 type Escalation = {
   id: string;
@@ -57,6 +59,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [writing, setWriting] = useState(false);
   const { setError, setNotice } = useNotifier();
+  const [, setNetworkVersion] = useState(0);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
@@ -97,6 +100,23 @@ function App() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [wallet]);
+
+  async function handleNetworkChange(name: NetworkName) {
+    if (name === appNetwork) return;
+    const previous = wallet;
+    setActiveNetwork(name);
+    setShipment(null);
+    setNetworkVersion((version) => version + 1);
+    setWallet(null);
+    if (!previous) return;
+    try {
+      // Reconnecting sets the wallet again, which re-queries the last-viewed shipment.
+      setWallet(await connectWallet(previous.walletId));
+      setNotice(`Switched to ${name}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not reconnect wallet on the new network.");
+    }
+  }
 
   function handleConnect() {
     setShowWalletModal(true);
@@ -171,10 +191,7 @@ function App() {
           <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
         </nav>
         <div className="sidebar-bottom">
-          <div className="network-card">
-            <span className="network-dot" />
-            <span><strong>{appNetwork === "testnet" ? "Stellar Testnet" : "Stellar Mainnet"}</strong><small>Network configured</small></span>
-          </div>
+          <NetworkSwitcher current={appNetwork} onChange={handleNetworkChange} />
           <a className="nav-item help-link" href="https://developers.stellar.org/docs" target="_blank" rel="noreferrer"><CircleHelp size={17} />Stellar docs<ExternalLink size={13} /></a>
           <div className="profile-row">
             <span className="profile-avatar">{wallet ? wallet.address.slice(1, 2) : "S"}</span>
