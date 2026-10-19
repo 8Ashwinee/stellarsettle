@@ -18,6 +18,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import { ShipmentWorkbench } from "./components/ShipmentWorkbench";
 import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
 
 type Escalation = {
@@ -263,6 +264,8 @@ function App() {
               </table>
             </div>
           </section>
+
+          <ShipmentWorkbench wallet={wallet} />
 
           <footer className="page-footer"><span>StellarSettle operations · Soroban contract interface</span><span><span className="footer-live" />{appNetwork} <span className="footer-sep">·</span> Contract {configuredContractId ? shortAddress(configuredContractId) : "not configured"}</span></footer>
         </div>
