@@ -1,0 +1,5 @@
+.pt-note { display: flex; align-items: center; gap: 8px; opacity: 0.8; margin: 8px 0; flex-wrap: wrap; }
+.pt-error { color: #e5484d; opacity: 1; }
+.pt-row { display: flex; gap: 8px; margin: 8px 0; }
+.pt-row input { flex: 1; }
+.pt-form { display: grid; gap: 8px; margin-top: 14px; }

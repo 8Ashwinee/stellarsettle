@@ -2,6 +2,7 @@ import type { Wallet } from "../lib/stellar";
 import { ShipmentRoleList } from "./ShipmentRoleList";
 import { SupplierProfile } from "./SupplierProfile";
 import { MilestoneTemplateManager } from "./MilestoneTemplateManager";
+import { PartyTransferPanel } from "./PartyTransferPanel";
 
 export function ShipmentWorkbench({ wallet }: { wallet: Wallet | null }) {
   return (
@@ -9,6 +10,7 @@ export function ShipmentWorkbench({ wallet }: { wallet: Wallet | null }) {
       <ShipmentRoleList wallet={wallet} />
       <MilestoneTemplateManager wallet={wallet} />
       <SupplierProfile wallet={wallet} />
+      <PartyTransferPanel wallet={wallet} />
     </div>
   );
 }
