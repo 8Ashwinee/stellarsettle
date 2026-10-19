@@ -18,6 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { clearLastShipmentId, loadLastShipmentId, saveLastShipmentId } from "./hooks/lastShipmentStorage";
+import { WalletModal } from "./components/WalletModal";
+import type { WalletId } from "./lib/wallets";
 import { useNotifier } from "./components/ToastProvider";
 import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
 
@@ -55,6 +57,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [writing, setWriting] = useState(false);
   const { setError, setNotice } = useNotifier();
+  const [showWalletModal, setShowWalletModal] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
   const [metadataValue, setMetadataValue] = useState("");
@@ -95,10 +98,15 @@ function App() {
     return () => { cancelled = true; };
   }, [wallet]);
 
-  async function handleConnect() {
+  function handleConnect() {
+    setShowWalletModal(true);
+  }
+
+  async function connectWith(walletId: WalletId) {
+    setShowWalletModal(false);
     setError("");
     try {
-      setWallet(await connectWallet());
+      setWallet(await connectWallet(walletId));
       setNotice("Wallet connected");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not connect wallet.");
@@ -145,6 +153,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      {showWalletModal && <WalletModal onSelect={connectWith} onClose={() => setShowWalletModal(false)} />}
       <aside className="sidebar">
         <a className="brand" href="#overview" aria-label="StellarSettle home">
           <span className="brand-mark"><span /></span>
@@ -231,7 +240,7 @@ function App() {
                 <label className="search-input-wrap"><Search size={17} /><input aria-label="Shipment ID" placeholder="Enter shipment ID" value={shipmentId} onChange={(event) => setShipmentId(event.target.value)} /><kbd>↵</kbd></label>
                 <button className="primary-button" disabled={!wallet || loading || !shipmentId.trim()}>{loading ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />}{loading ? "Loading" : "Look up"}</button>
               </form>
-              {!wallet && <div className="inline-callout"><WalletCards size={16} /><span>Connect Freighter to query public contract data and submit authorized transactions.</span><button onClick={handleConnect}>Connect</button></div>}
+              {!wallet && <div className="inline-callout"><WalletCards size={16} /><span>Connect a Stellar wallet to query public contract data and submit authorized transactions.</span><button onClick={handleConnect}>Connect</button></div>}
               {shipment ? <div className="shipment-detail">
                 <div className="detail-topline"><div className="shipment-ref"><span className="shipment-icon"><FileSearch size={18} /></span><span><strong>{shipment.id}</strong><small>Created at ledger {shipment.created_at.toLocaleString()}</small></span></div><span className={`status-pill ${status.toLowerCase()}`}><span />{status}</span></div>
                 <div className="detail-grid">

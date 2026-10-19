@@ -7,7 +7,7 @@ import {
   rpc,
   scValToNative,
 } from "@stellar/stellar-sdk";
-import { getNetwork, requestAccess, signTransaction } from "@stellar/freighter-api";
+import { getWalletAdapter, type WalletId } from "./wallets";
 
 const network = import.meta.env.VITE_STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
 const rpcUrl = import.meta.env.VITE_STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
@@ -15,7 +15,7 @@ const passphrase = network === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
 const contractId = import.meta.env.VITE_STELLAR_CONTRACT_ID as string;
 const server = new rpc.Server(rpcUrl);
 
-export type Wallet = { address: string; network: string; networkPassphrase: string };
+export type Wallet = { address: string; network: string; networkPassphrase: string; walletId?: WalletId };
 export type Shipment = {
   id: string;
   status: string;
@@ -45,16 +45,9 @@ function scSymbol(value: string) {
   return nativeToScVal(value, { type: "symbol" });
 }
 
-export async function connectWallet(): Promise<Wallet> {
-  const access = await requestAccess();
-  if (access.error) throw new Error(access.error.message);
-  if (!access.address) throw new Error("Freighter did not return an account address.");
-  const selectedNetwork = await getNetwork();
-  if (selectedNetwork.error) throw new Error(selectedNetwork.error.message);
-  if (selectedNetwork.networkPassphrase !== passphrase) {
-    throw new Error(`Freighter is on ${selectedNetwork.network}; this app is configured for ${network}.`);
-  }
-  return { address: access.address, network: selectedNetwork.network, networkPassphrase: selectedNetwork.networkPassphrase };
+export async function connectWallet(walletId: WalletId = "freighter"): Promise<Wallet> {
+  const session = await getWalletAdapter(walletId).connect(passphrase, network);
+  return { ...session, walletId };
 }
 
 export async function getShipmentSummary(address: string, shipmentId: string): Promise<Shipment> {
@@ -90,12 +83,11 @@ export async function setShipmentMetadata(
   const simulated = await server.simulateTransaction(transaction);
   if ("error" in simulated) throw new Error(simulated.error);
   const prepared = rpc.assembleTransaction(transaction, simulated).build();
-  const signed = await signTransaction(prepared.toXDR(), {
+  const signedXdr = await getWalletAdapter(wallet.walletId).sign(prepared.toXDR(), {
     networkPassphrase: passphrase,
     address: wallet.address,
   });
-  if (signed.error) throw new Error(signed.error.message);
-  const signedTransaction = TransactionBuilder.fromXDR(signed.signedTxXdr, passphrase);
+  const signedTransaction = TransactionBuilder.fromXDR(signedXdr, passphrase);
   const submitted = await server.sendTransaction(signedTransaction);
   if (submitted.status === "ERROR") throw new Error("The network rejected the signed transaction.");
 
