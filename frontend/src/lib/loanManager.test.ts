@@ -33,6 +33,20 @@ describe("loan manager XDR codecs", () => {
     expect(borrowCapacity(snapshot)).toBe(100n);
   });
 
+  it("never reports negative capacity for an unhealthy position or an illiquid pool", () => {
+    const snapshot: LoanSnapshot = {
+      market: { collateral_token: "collateral", debt_token: "debt", liq_threshold_bps: 8_000 },
+      position: { collateral: "1000", debt: "900" },
+      depositorBalance: "0",
+      pool: { totalDeposits: "1000", totalBorrowed: "1000", twapFallbackCount: 0 },
+      collateralPrice: "100000000",
+      debtPrice: "100000000",
+      paused: false,
+    };
+
+    expect(borrowCapacity(snapshot)).toBe(0n);
+  });
+
   it("calculates the exact health-factor fraction used by repay previews", () => {
     const snapshot: LoanSnapshot = {
       market: { collateral_token: "collateral", debt_token: "debt", liq_threshold_bps: 8_000 },

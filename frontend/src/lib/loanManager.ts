@@ -220,7 +220,8 @@ export function borrowCapacity(snapshot: LoanSnapshot) {
     ? maxDebtUnits - BigInt(snapshot.position.debt)
     : 0n;
   const freeLiquidity = BigInt(snapshot.pool.totalDeposits) - BigInt(snapshot.pool.totalBorrowed);
-  const available = positionCapacity < freeLiquidity ? positionCapacity : freeLiquidity > 0n ? freeLiquidity : 0n;
+  const available = positionCapacity < freeLiquidity ? positionCapacity : freeLiquidity;
+  if (available <= 0n) return 0n;
   return available > maxInt128 ? maxInt128 : available;
 }
 
