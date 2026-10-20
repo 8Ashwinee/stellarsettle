@@ -162,9 +162,16 @@ h2 { font-size: 15px; line-height: 1.25; margin: 0; font-weight: 600; color: #29
 
 .activity-panel { min-height: 336px; }
 .refresh-button { border: 1px solid var(--line); width: 30px; height: 30px; }
+.event-type-filters { display: flex; gap: 7px; padding: 10px 16px 8px; flex-wrap: wrap; border-bottom: 1px solid #edf0ed; }
+.filter-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border: 1px solid #dfe5df; border-radius: 4px; background: white; color: #8b938e; font-size: 9px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.filter-chip:hover { border-color: #c3c9c4; }
+.filter-chip.active { border-color: var(--green); color: var(--green); background: #eef5ee; }
 .event-list { flex: 1; padding: 3px 16px; }
-.event-row { display: flex; align-items: center; gap: 9px; min-height: 55px; border-bottom: 1px solid #f0f2ef; }
+.event-row { display: flex; align-items: center; gap: 9px; min-height: 55px; border-bottom: 1px solid #f0f2ef; cursor: pointer; }
+.event-row:hover { background: #fafbf9; }
 .event-row:last-child { border-bottom: 0; }
+.event-row.unread { background: #f9faf8; }
+.unread-indicator { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex: 0 0 auto; margin-left: 2px; }
 .event-mark { width: 28px; height: 28px; display: grid; place-items: center; color: #b95c4a; background: #fbefeb; border-radius: 50%; flex: 0 0 auto; }
 .event-copy { min-width: 0; display: grid; gap: 4px; flex: 1; }
 .event-copy strong { font-size: 10px; font-weight: 650; }

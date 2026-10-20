@@ -30,6 +30,10 @@ type Escalation = {
   currentLedger: number;
 };
 
+type Notification = Escalation & {
+  read: boolean;
+};
+
 const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8787").replace(/\/$/, "");
 
 function shortAddress(address: string) {
@@ -49,7 +53,8 @@ function App() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
-  const [events, setEvents] = useState<Escalation[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [selectedEventType, setSelectedEventType] = useState<string | null>(null);
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -67,14 +72,17 @@ function App() {
         setApiState("online");
       })
       .catch(() => setApiState("offline"));
-    fetch(`${backendUrl}/api/events?limit=8`, { signal: controller.signal })
+    fetch(`${backendUrl}/api/events?limit=20`, { signal: controller.signal })
       .then((response) => response.ok ? response.json() as Promise<Escalation[]> : [])
-      .then(setEvents)
+      .then((events) => setNotifications(events.map((e) => ({ ...e, read: false }))))
       .catch(() => undefined);
     const stream = new EventSource(`${backendUrl}/api/stream`);
     stream.addEventListener("dispute_escalated", (message) => {
       const event = JSON.parse((message as MessageEvent<string>).data) as Escalation;
-      setEvents((current) => [event, ...current.filter((item) => item.id !== event.id)].slice(0, 8));
+      setNotifications((current) => [
+        { ...event, read: false },
+        ...current.filter((item) => item.id !== event.id)
+      ].slice(0, 20));
     });
     return () => {
       controller.abort();
@@ -128,6 +136,21 @@ function App() {
   }
 
   const status = shipment?.status ?? "Waiting for lookup";
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  const eventTypes = Array.from(new Set(notifications.map((n) => n.type)));
+  const filteredNotifications = selectedEventType
+    ? notifications.filter((n) => n.type === selectedEventType)
+    : notifications;
+
+  function markNotificationsAsRead() {
+    setNotifications((current) => current.map((n) => ({ ...n, read: true })));
+  }
+
+  function handleNotificationClick(id: string) {
+    setNotifications((current) =>
+      current.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -145,7 +168,7 @@ function App() {
         <nav className="primary-nav" aria-label="Primary navigation">
           <a className="nav-item active" href="#overview"><LayoutDashboard size={17} />Overview</a>
           <a className="nav-item" href="#shipment"><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
-          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{unreadCount > 0 && <span className="nav-count alert-count">{unreadCount}</span>}</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="network-card">
@@ -166,7 +189,7 @@ function App() {
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>Overview</strong></div>
           <div className="top-actions">
             <span className={`backend-indicator ${apiState}`}><span />API {apiState === "online" ? "connected" : apiState === "offline" ? "offline" : "checking"}</span>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} />{events.length > 0 && <i />}</button>
+            <button className="icon-button notification-button" aria-label="Notifications" onClick={() => { markNotificationsAsRead(); setSelectedEventType(null); }}><Bell size={17} />{unreadCount > 0 && <i />}</button>
             <button className={`wallet-button ${wallet ? "connected" : ""}`} onClick={wallet ? () => setWallet(null) : handleConnect}>
               <WalletCards size={16} />{wallet ? shortAddress(wallet.address) : "Connect wallet"}
             </button>
@@ -239,15 +262,47 @@ function App() {
 
             <section className="panel activity-panel" id="activity">
               <div className="panel-heading">
-                <div><div className="section-kicker">EVENT MONITOR</div><h2>Dispute activity</h2></div>
-                <button className="icon-button refresh-button" title="Refresh events" onClick={() => fetch(`${backendUrl}/api/events?limit=8`).then((response) => response.json()).then(setEvents).catch(() => setError("Could not refresh backend events."))}><RefreshCw size={16} /></button>
+                <div><div className="section-kicker">NOTIFICATION CENTER</div><h2>Event monitor</h2></div>
+                <button className="icon-button refresh-button" title="Refresh notifications" onClick={() => fetch(`${backendUrl}/api/events?limit=20`).then((response) => response.json()).then((events: Escalation[]) => setNotifications(events.map((e) => ({ ...e, read: true })))).catch(() => setError("Could not refresh backend events."))}><RefreshCw size={16} /></button>
               </div>
-              {events.length ? <div className="event-list">{events.map((event) => <article className="event-row" key={event.id}>
-                <span className="event-mark"><ShieldCheck size={15} /></span>
-                <span className="event-copy"><strong>Dispute escalated</strong><small>{event.shipmentId} · Milestone {event.milestoneIndex + 1}</small></span>
-                <span className="event-ledger">L{event.ledger.toLocaleString()}</span>
-              </article>)}</div> : <div className="empty-events"><span className="empty-icon subtle-icon"><Bell size={21} /></span><strong>No escalation events</strong><span>New contract alerts will appear here in real time.</span></div>}
-              <div className="activity-footer"><span className="stream-dot" />Listening for dispute_escalated<span className="stream-status">{apiState === "online" ? "Connected" : "Offline"}</span></div>
+              {notifications.length > 0 ? <>
+                {eventTypes.length > 1 && <div className="event-type-filters">
+                  <button
+                    className={`filter-chip ${!selectedEventType ? "active" : ""}`}
+                    onClick={() => setSelectedEventType(null)}
+                  >
+                    All events ({notifications.length})
+                  </button>
+                  {eventTypes.map((type) => {
+                    const count = notifications.filter((n) => n.type === type).length;
+                    return (
+                      <button
+                        key={type}
+                        className={`filter-chip ${selectedEventType === type ? "active" : ""}`}
+                        onClick={() => setSelectedEventType(type)}
+                      >
+                        {type} ({count})
+                      </button>
+                    );
+                  })}
+                </div>}
+                <div className="event-list">{filteredNotifications.map((notification) => (
+                  <article
+                    key={notification.id}
+                    className={`event-row ${!notification.read ? "unread" : ""}`}
+                    onClick={() => handleNotificationClick(notification.id)}
+                  >
+                    {!notification.read && <span className="unread-indicator" title="Unread" />}
+                    <span className="event-mark"><ShieldCheck size={15} /></span>
+                    <span className="event-copy">
+                      <strong>{notification.type === "dispute_escalated" ? "Dispute escalated" : notification.type}</strong>
+                      <small>{notification.shipmentId} · Milestone {notification.milestoneIndex + 1}</small>
+                    </span>
+                    <span className="event-ledger">L{notification.ledger.toLocaleString()}</span>
+                  </article>
+                ))}</div>
+              </> : <div className="empty-events"><span className="empty-icon subtle-icon"><Bell size={21} /></span><strong>No events yet</strong><span>Contract events and notifications will appear here in real time.</span></div>}
+              <div className="activity-footer"><span className="stream-dot" />Listening for all event types<span className="stream-status">{apiState === "online" ? "Connected" : "Offline"}</span></div>
             </section>
           </div>
 
