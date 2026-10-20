@@ -277,6 +277,16 @@ table { width: 100%; border-collapse: collapse; text-align: left; white-space: n
 th { height: 35px; padding: 0 15px; background: #fafbf9; color: #909992; font-size: 8px; font-weight: 700; }
 td { height: 53px; padding: 0 15px; border-top: 1px solid #edf0ed; color: #59645d; font-size: 10px; }
 .table-id { display: inline-flex; align-items: center; gap: 8px; color: #34413a; font-weight: 650; }
+.table-link { padding: 0; border: 0; background: transparent; font-size: 10px; cursor: pointer; }
+.table-link:hover { color: var(--green); }
+.select-cell { width: 18px; padding-right: 0; }
+.select-cell input { accent-color: var(--green); }
+tr.row-selected td { background: #f4f8f3; }
+.bulk-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 15px; border-top: 1px solid #edf0ed; background: #f4f8f3; font-size: 10px; }
+.bulk-toolbar > strong { margin-right: 4px; color: var(--green-deep); }
+.bulk-toolbar .primary-button { min-height: 30px; font-size: 9px; }
+.bulk-toolbar input { flex: 1; min-width: 140px; height: 30px; }
+.event-row.dispute_raised .event-mark { color: #fff; background: var(--coral); }
 .table-file { width: 25px; height: 25px; }
 .muted { color: #8b948e; font-size: 9px; }
 .dispute-count { color: #ae5948; }
