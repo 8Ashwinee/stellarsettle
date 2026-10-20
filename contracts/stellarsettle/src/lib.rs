@@ -5512,6 +5512,14 @@ impl StellarSettleContract {
         );
     }
 
+    /// Returns the configured per-milestone evidence cap (defaults to 5).
+    pub fn get_max_evidence_per_milestone(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MaxEvidencePerMilestone)
+            .unwrap_or(5)
+    }
+
     /// Returns the current evidence count for a given milestone.
     pub fn get_evidence_count(env: Env, shipment_id: String, milestone_index: u32) -> u32 {
         env.storage()

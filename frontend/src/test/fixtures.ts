@@ -1,24 +1,33 @@
 import type { ShipmentDetail, Wallet } from "../lib/stellar";
 
-export const buyerAddress = "GBUYERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-export const supplierAddress = "GSUPPLIERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const BUYER = "GBUYERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const SUPPLIER = "GSUPPLIERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const LOGISTICS = "GLOGISTICSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const ARBITER = "GARBITERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const TOKEN = "CTOKENAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 export function walletFor(address: string): Wallet {
   return { address, network: "TESTNET", networkPassphrase: "Test SDF Network ; September 2015" };
 }
 
-export function shipmentFixture(overrides: Partial<ShipmentDetail> = {}): ShipmentDetail {
+export function makeShipment(overrides: Partial<ShipmentDetail> = {}): ShipmentDetail {
   return {
-    id: "SHIP-1",
+    id: "PO-1",
     status: "Active",
-    buyers: [buyerAddress],
-    supplier: supplierAddress,
+    buyers: [BUYER],
+    supplier: SUPPLIER,
+    logistics: LOGISTICS,
+    arbiter: ARBITER,
+    token: TOKEN,
+    total_amount: "1000",
     released_amount: "0",
     total_advanced_amount: "0",
+    buyer_cancel_fee_bps: 0,
     milestones: [
-      { name: "Pickup", payment_percent: 40, status: "ProofSubmitted", deadline_ledger: 0 },
-      { name: "Delivery", payment_percent: 60, status: "Pending", deadline_ledger: 0 },
+      { index: 0, name: "Goods dispatched", payment_percent: 50, proof_hash: "", status: "Pending" },
+      { index: 1, name: "Delivered", payment_percent: 50, proof_hash: "", status: "Pending" },
     ],
+    cancellation_reason: [],
     ...overrides,
   };
 }
