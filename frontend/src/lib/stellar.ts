@@ -1,4 +1,5 @@
 import {
+  Address,
   BASE_FEE,
   Contract,
   Networks,
@@ -90,7 +91,7 @@ async function readContract(address: string, method: string, ...args: xdr.ScVal[
     .setTimeout(30)
     .build();
   const simulated = await server.simulateTransaction(transaction);
-  if ("error" in simulated) throw new Error(simulated.error);
+  if ("error" in simulated) throw new SimulationError(simulated.error);
   const result = simulated.result;
   if (!result) throw new Error("Contract query returned no result.");
   return scValToNative(result.retval);
