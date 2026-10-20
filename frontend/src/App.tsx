@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileSearch,
   LayoutDashboard,
+  Landmark,
   LoaderCircle,
   PiggyBank,
   Plus,
@@ -118,6 +119,25 @@ function App() {
       setError(cause instanceof Error ? cause.message : "Unable to refresh shipment.");
     }
   }, [wallet, shipment]);
+
+  useEffect(() => {
+    const updatePath = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", updatePath);
+    return () => window.removeEventListener("popstate", updatePath);
+  }, []);
+
+  function navigate(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.history.pushState(null, "", event.currentTarget.href);
+    setPathname(window.location.pathname);
+    if (window.location.hash) {
+      const targetId = window.location.hash.slice(1);
+      window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth" }));
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -402,7 +422,7 @@ function App() {
         </div>
       </aside>
 
-      <main className="main-area" id="overview">
+      <main className="main-area" id={isLending ? "lending" : "overview"}>
         <header className="topbar">
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{onVault ? "Buyer vault" : "Overview"}</strong></div>
           <div className="top-actions">
