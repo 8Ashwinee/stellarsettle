@@ -46,6 +46,7 @@ function App() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [detail, setDetail] = useState<ShipmentDetail | null>(null);
   const [events, setEvents] = useState<Escalation[]>([]);
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
@@ -111,20 +112,45 @@ function App() {
     }
   }
 
-  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!wallet || !shipmentId.trim()) return;
+  async function loadShipment(address: string, id: string) {
     setLoading(true);
-    setError("");
-    setNotice("");
     try {
-      setShipment(await getShipmentSummary(wallet.address, shipmentId.trim()));
+      const [summary, full] = await Promise.all([getShipmentSummary(address, id), getShipment(address, id)]);
+      setShipment(summary);
+      setDetail(full);
     } catch (cause) {
       setShipment(null);
-      setError(cause instanceof Error ? cause.message : "Unable to load shipment.");
+      setDetail(null);
+      setError(errorMessage(cause, "Unable to load shipment."));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!wallet || !shipmentId.trim()) return;
+    setError("");
+    setNotice("");
+    await loadShipment(wallet.address, shipmentId.trim());
+  }
+
+  function handleActionStart() {
+    setWriting(true);
+    setError("");
+    setNotice("");
+  }
+
+  function handleActionError(message: string) {
+    setWriting(false);
+    setError(message);
+  }
+
+  async function handleActionComplete(message: string, id: string) {
+    setWriting(false);
+    setNotice(message);
+    setShipmentId(id);
+    if (wallet) await loadShipment(wallet.address, id);
   }
 
   async function handleMetadata(event: React.FormEvent<HTMLFormElement>) {
@@ -140,7 +166,7 @@ function App() {
       setMetadataValue("");
       setShowMetadata(false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Metadata transaction failed.");
+      setError(errorMessage(cause, "Metadata transaction failed."));
     } finally {
       setWriting(false);
     }
@@ -291,10 +317,12 @@ function App() {
             </section>
           </div>
 
+          <CreateShipmentForm wallet={wallet} onStart={handleActionStart} onCreated={(id, hash) => handleActionComplete(`Shipment ${id} created · ${hash.slice(0, 12)}…`, id)} onError={handleActionError} />
+
           <section className="panel table-panel">
             <div className="panel-heading table-heading">
               <div><div className="section-kicker">RECENTLY VIEWED</div><h2>Shipment record</h2></div>
-              <button className="filter-button" onClick={() => { setShipment(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
+              <button className="filter-button" onClick={() => { setShipment(null); setDetail(null); setShipmentId(""); }}>Clear view <X size={14} /></button>
             </div>
             <div className="table-wrap">
               <table>

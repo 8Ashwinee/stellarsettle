@@ -59,16 +59,8 @@ function scSymbol(value: string) {
   return nativeToScVal(value, { type: "symbol" });
 }
 
-export async function connectWallet(): Promise<Wallet> {
-  const access = await requestAccess();
-  if (access.error) throw new Error(access.error.message);
-  if (!access.address) throw new Error("Freighter did not return an account address.");
-  const selectedNetwork = await getNetwork();
-  if (selectedNetwork.error) throw new Error(selectedNetwork.error.message);
-  if (selectedNetwork.networkPassphrase !== passphrase) {
-    throw new Error(`Freighter is on ${selectedNetwork.network}; this app is configured for ${network}.`);
-  }
-  return { address: access.address, network: selectedNetwork.network, networkPassphrase: selectedNetwork.networkPassphrase };
+function scU32(value: number) {
+  return nativeToScVal(value, { type: "u32" });
 }
 
 function scU32(value: number) {
