@@ -2532,9 +2532,9 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL (normally `http://localhost:5173`) and connect Freighter on the configured network. The dashboard reads shipment summaries from Soroban RPC, signs shipment metadata updates in the connected wallet, and displays `dispute_escalated` events from the backend's server-sent event stream. The backend's optional off-chain metadata write endpoint is separate and requires a server-only `METADATA_API_KEY`.
+Open the Vite URL (normally `http://localhost:5173`) and connect Freighter on the configured network. The dashboard reads shipment summaries from Soroban RPC, signs shipment metadata updates in the connected wallet, and displays `dispute_escalated` events from the backend's server-sent event stream. For a loaded shipment, buyers can confirm milestones awaiting confirmation, approve or deny supplier deadline-extension requests, and approve advance payments; suppliers can request extensions (with a reason) and advances up to `get_max_advance_percent`. The `/standing-orders` page lists the connected buyer's standing orders and lets them create, execute, or cancel them. The backend's optional off-chain metadata write endpoint is separate and requires a server-only `METADATA_API_KEY`.
 
-Validate either application from its directory with `npm run typecheck` and `npm run build`.
+Validate either application from its directory with `npm run typecheck` and `npm run build`. The frontend's component tests run with `npm test`.
 
 ---
 
