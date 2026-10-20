@@ -1,0 +1,10 @@
+.sp-note { display: flex; align-items: center; gap: 8px; opacity: 0.8; margin: 10px 0; }
+.sp-error { color: #e5484d; opacity: 1; }
+.sp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 14px; }
+.sp-grid > div { display: grid; gap: 4px; padding: 10px; border: 1px solid #8883; border-radius: 8px; }
+.sp-grid span { font-size: 11px; opacity: 0.7; letter-spacing: 0.04em; }
+.sp-grid strong { font-size: 20px; }
+.sp-grid small { opacity: 0.7; }
+.sp-bronze { color: #b87333; }
+.sp-silver { color: #8a94a6; }
+.sp-gold { color: #d4a017; }
