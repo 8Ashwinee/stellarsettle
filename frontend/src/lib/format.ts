@@ -20,3 +20,6 @@ export function statusLabel(status: string) {
   const words = status.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+export function isPositiveAmount(value: string) {
+  return /^[0-9]+$/.test(value.trim()) && BigInt(value.trim()) > 0n;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   ArrowDownLeft,
@@ -11,6 +11,7 @@ import {
   FileSearch,
   LayoutDashboard,
   LoaderCircle,
+  PiggyBank,
   Plus,
   RefreshCw,
   Search,
@@ -18,12 +19,11 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { appNetwork, configuredContractId, connectWallet, getShipment, getShipmentSummary, setShipmentMetadata, type Shipment, type ShipmentDetail, type Wallet } from "./lib/stellar";
-import { amount, errorMessage, shortAddress, statusLabel } from "./lib/format";
-import { CreateShipmentForm } from "./components/CreateShipmentForm";
-import { ProofSubmissionForm } from "./components/ProofSubmissionForm";
-import { DisputePanel } from "./components/DisputePanel";
-import { CancelShipmentForm } from "./components/CancelShipmentForm";
+import { appNetwork, configuredContractId, connectWallet, getShipmentSummary, setShipmentMetadata, type Shipment, type Wallet } from "./lib/stellar";
+import { amount, shortAddress } from "./lib/format";
+import { ShipmentMilestones } from "./components/ShipmentMilestones";
+import { TopUpForm } from "./components/TopUpForm";
+import { VaultPage } from "./components/VaultPage";
 
 type Escalation = {
   id: string;
@@ -37,7 +37,12 @@ type Escalation = {
 
 const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8787").replace(/\/$/, "");
 
+function currentPath() {
+  return window.location.pathname.replace(/\/+$/, "") || "/";
+}
+
 function App() {
+  const [path, setPath] = useState(currentPath);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shipmentId, setShipmentId] = useState("");
   const [shipment, setShipment] = useState<Shipment | null>(null);
@@ -51,6 +56,28 @@ function App() {
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
   const [metadataValue, setMetadataValue] = useState("");
+  const [showTopUp, setShowTopUp] = useState(false);
+
+  useEffect(() => {
+    const onPopState = () => setPath(currentPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function navigate(to: string, event?: React.MouseEvent) {
+    event?.preventDefault();
+    window.history.pushState(null, "", to);
+    setPath(currentPath());
+  }
+
+  const refreshShipment = useCallback(async () => {
+    if (!wallet || !shipment) return;
+    try {
+      setShipment(await getShipmentSummary(wallet.address, shipment.id));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to refresh shipment.");
+    }
+  }, [wallet, shipment]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -146,6 +173,11 @@ function App() {
   }
 
   const status = shipment?.status ?? "Waiting for lookup";
+  const onVault = path === "/vault";
+  const overviewLink = (hash: string) => ({
+    href: `/${hash}`,
+    onClick: (event: React.MouseEvent) => { if (onVault) navigate(`/${hash}`, event); },
+  });
 
   return (
     <div className="app-shell">
@@ -161,9 +193,10 @@ function App() {
         </div>
         <div className="nav-label">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Primary navigation">
-          <a className="nav-item active" href="#overview"><LayoutDashboard size={17} />Overview</a>
-          <a className="nav-item" href="#shipment"><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
-          <a className="nav-item" href="#activity"><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className={`nav-item ${onVault ? "" : "active"}`} {...overviewLink("#overview")}><LayoutDashboard size={17} />Overview</a>
+          <a className="nav-item" {...overviewLink("#shipment")}><FileSearch size={17} />Shipments<span className="nav-count">{shipment ? "1" : "0"}</span></a>
+          <a className="nav-item" {...overviewLink("#activity")}><Activity size={17} />Dispute activity{events.length > 0 && <span className="nav-count alert-count">{events.length}</span>}</a>
+          <a className={`nav-item ${onVault ? "active" : ""}`} href="/vault" onClick={(event) => navigate("/vault", event)}><PiggyBank size={17} />Buyer vault</a>
         </nav>
         <div className="sidebar-bottom">
           <div className="network-card">
@@ -181,7 +214,7 @@ function App() {
 
       <main className="main-area" id="overview">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>Overview</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{onVault ? "Buyer vault" : "Overview"}</strong></div>
           <div className="top-actions">
             <span className={`backend-indicator ${apiState}`}><span />API {apiState === "online" ? "connected" : apiState === "offline" ? "offline" : "checking"}</span>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} />{events.length > 0 && <i />}</button>
@@ -191,7 +224,20 @@ function App() {
           </div>
         </header>
 
-        <div className="page-content">
+        {onVault ? <div className="page-content">
+          <section className="page-heading">
+            <div>
+              <div className="eyebrow"><span className="eyebrow-rule" />BUYER</div>
+              <h1>Escrow vault</h1>
+              <p>Pre-fund escrow by depositing tokens into your contract-held vault.</p>
+            </div>
+            <div className="heading-meta"><span className="live-pulse" />LIVE NETWORK <span className="meta-divider" />{appNetwork.toUpperCase()}</div>
+          </section>
+
+          {(error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`} role="status">{error ? <X size={16} /> : <Check size={16} />}{error || notice}<button className="icon-button" onClick={() => { setError(""); setNotice(""); }} aria-label="Dismiss"><X size={15} /></button></div>}
+
+          <VaultPage wallet={wallet} defaultToken={shipment?.token ?? ""} onConnect={handleConnect} onError={setError} onNotice={setNotice} />
+        </div> : <div className="page-content">
           <section className="page-heading">
             <div>
               <div className="eyebrow"><span className="eyebrow-rule" />OPERATIONS</div>
@@ -245,24 +291,14 @@ function App() {
                   <div><span>MILESTONES</span><strong>{shipment.milestone_count}</strong></div>
                   <div><span>OPEN DISPUTES</span><strong className={shipment.open_disputes ? "text-coral" : ""}>{shipment.open_disputes}</strong></div>
                 </div>
-                <div className="detail-footer"><span>Supplier <code>{shortAddress(shipment.supplier)}</code><span className="footer-sep"> · </span>Token <code>{shortAddress(shipment.token)}</code></span><button className="text-button" onClick={() => setShowMetadata((shown) => !shown)}><Plus size={15} />Add metadata</button></div>
+                <div className="detail-footer"><span>Supplier <code>{shortAddress(shipment.supplier)}</code><span className="footer-sep"> · </span>Token <code>{shortAddress(shipment.token)}</code></span><span className="detail-actions">{wallet && <button className="text-button" onClick={() => setShowTopUp((shown) => !shown)}><ArrowDownLeft size={15} />Top up escrow</button>}<button className="text-button" onClick={() => setShowMetadata((shown) => !shown)}><Plus size={15} />Add metadata</button></span></div>
+                {showTopUp && wallet && <TopUpForm wallet={wallet} shipmentId={shipment.id} onToppedUp={async () => { await refreshShipment(); setShowTopUp(false); }} onError={setError} onNotice={setNotice} />}
                 {showMetadata && <form className="metadata-form" onSubmit={handleMetadata}>
                   <input aria-label="Metadata key" placeholder="Key (e.g. po_number)" value={metadataKey} onChange={(event) => setMetadataKey(event.target.value)} pattern="[a-zA-Z0-9_]{1,32}" required />
                   <input aria-label="Metadata value" placeholder="Value" value={metadataValue} onChange={(event) => setMetadataValue(event.target.value)} maxLength={1000} required />
                   <button className="primary-button" disabled={writing}>{writing ? <LoaderCircle className="spin" size={15} /> : <ArrowUpRight size={15} />}{writing ? "Signing" : "Sign & save"}</button>
                 </form>}
-                {detail && detail.id === shipment.id && <>
-                  <ol className="milestone-list" aria-label="Milestones">{detail.milestones.map((milestone) => <li key={milestone.index}>
-                    <span className="milestone-index">{milestone.index + 1}</span>
-                    <span className="milestone-copy"><strong>{milestone.name}</strong><small>{milestone.payment_percent}% of escrow{milestone.proof_hash ? ` · ${milestone.proof_hash}` : ""}</small></span>
-                    <span className={`status-pill ${milestone.status.toLowerCase()}`}><span />{statusLabel(milestone.status)}</span>
-                  </li>)}</ol>
-                  <div className="action-grid">
-                    <ProofSubmissionForm key={`proof-${detail.id}`} wallet={wallet} shipment={detail} onStart={handleActionStart} onSubmitted={(message) => handleActionComplete(message, detail.id)} onError={handleActionError} />
-                    <DisputePanel key={`dispute-${detail.id}`} wallet={wallet} shipment={detail} onStart={handleActionStart} onResolved={(message) => handleActionComplete(message, detail.id)} onError={handleActionError} />
-                    <CancelShipmentForm key={`cancel-${detail.id}`} wallet={wallet} shipment={detail} onStart={handleActionStart} onCancelled={(message) => handleActionComplete(message, detail.id)} onError={handleActionError} />
-                  </div>
-                </>}
+                {wallet && <ShipmentMilestones key={shipment.id} wallet={wallet} shipmentId={shipment.id} onShipmentChanged={refreshShipment} onError={setError} onNotice={setNotice} />}
               </div> : <div className="empty-shipment"><span className="empty-icon"><FileSearch size={23} /></span><strong>Shipment details appear here</strong><span>Look up a shipment ID to inspect escrow, milestone, and dispute status.</span></div>}
               <div className="panel-bottom-note"><span>Amounts shown in the token's smallest units.</span><a href={`https://stellar.expert/explorer/${appNetwork}/contract/${configuredContractId || ""}`} target="_blank" rel="noreferrer">View contract <ExternalLink size={13} /></a></div>
             </section>
@@ -297,7 +333,7 @@ function App() {
           </section>
 
           <footer className="page-footer"><span>StellarSettle operations · Soroban contract interface</span><span><span className="footer-live" />{appNetwork} <span className="footer-sep">·</span> Contract {configuredContractId ? shortAddress(configuredContractId) : "not configured"}</span></footer>
-        </div>
+        </div>}
       </main>
     </div>
   );
