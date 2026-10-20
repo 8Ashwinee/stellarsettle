@@ -14,6 +14,7 @@ import {
   PiggyBank,
   Plus,
   RefreshCw,
+  Repeat,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -140,6 +141,18 @@ function App() {
       stream.close();
     };
   }, []);
+
+  useEffect(() => {
+    const syncPage = () => setPage(currentPage());
+    window.addEventListener("popstate", syncPage);
+    return () => window.removeEventListener("popstate", syncPage);
+  }, []);
+
+  function navigate(event: React.MouseEvent<HTMLAnchorElement>, path: string) {
+    event.preventDefault();
+    window.history.pushState(null, "", path);
+    setPage(currentPage());
+  }
 
   async function handleConnect() {
     setError("");
@@ -433,7 +446,7 @@ function App() {
             <article className="metric">
               <div className="metric-top"><span>Escrow value</span><span className="metric-icon blue-icon"><ArrowDownLeft size={16} /></span></div>
               <div className="metric-value">{shipment ? amount(shipment.total_amount) : "—"}<small>{shipment ? "base units" : "Awaiting data"}</small></div>
-              <div className="metric-foot">{shipment ? `${amount(shipment.released_amount)} released` : "Connect and look up a shipment"}</div>
+              <div className="metric-foot">{shipment ? `${amount(released)} released` : "Connect and look up a shipment"}</div>
             </article>
             <article className="metric">
               <div className="metric-top"><span>Open disputes</span><span className="metric-icon coral-icon"><ShieldCheck size={16} /></span></div>
@@ -447,7 +460,7 @@ function App() {
             </article>
           </section>
 
-          {(error || notice) && <div className={`toast ${error ? "toast-error" : "toast-success"}`} role="status">{error ? <X size={16} /> : <Check size={16} />}{error || notice}<button className="icon-button" onClick={() => { setError(""); setNotice(""); }} aria-label="Dismiss"><X size={15} /></button></div>}
+          {toast}
 
           <div className="content-grid">
             <section className="panel shipment-panel" id="shipment">
@@ -464,7 +477,7 @@ function App() {
                 <div className="detail-topline"><div className="shipment-ref"><span className="shipment-icon"><FileSearch size={18} /></span><span><strong>{shipment.id}</strong><small>Created at ledger {shipment.created_at.toLocaleString()}</small></span></div><StatusPill status={status} /></div>
                 <div className="detail-grid">
                   <div><span>ESCROW TOTAL</span><strong>{amount(shipment.total_amount)} <small>units</small></strong></div>
-                  <div><span>RELEASED</span><strong>{amount(shipment.released_amount)} <small>units</small></strong></div>
+                  <div><span>RELEASED</span><strong>{amount(released)} <small>units</small></strong></div>
                   <div><span>MILESTONES</span><strong>{shipment.milestone_count}</strong></div>
                   <div><span>OPEN DISPUTES</span><strong className={shipment.open_disputes ? "text-coral" : ""}>{shipment.open_disputes}</strong></div>
                 </div>
@@ -509,6 +522,7 @@ function App() {
               </table>
             </div>
           </section>
+          </>}
 
           <footer className="page-footer"><span>StellarSettle operations · Soroban contract interface</span><span><span className="footer-live" />{appNetwork} <span className="footer-sep">·</span> Contract {configuredContractId ? shortAddress(configuredContractId) : "not configured"}</span></footer>
         </div>}

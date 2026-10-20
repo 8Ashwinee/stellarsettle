@@ -295,6 +295,32 @@ tr.row-selected td { background: #f4f8f3; }
 .page-footer > span:last-child { display: flex; align-items: center; gap: 7px; }
 .footer-live { width: 5px; height: 5px; box-shadow: none; }
 .footer-sep { color: #c0c7c1; }
+.workflow-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+.workflow-panel { display: flex; flex-direction: column; }
+.milestone-list { margin: 0; padding: 3px 16px; list-style: none; }
+.milestone-row { display: flex; align-items: center; gap: 9px; min-height: 55px; padding: 8px 0; border-bottom: 1px solid #f0f2ef; }
+.milestone-row:last-child { border-bottom: 0; }
+.milestone-copy { min-width: 0; display: grid; gap: 4px; flex: 1; }
+.milestone-copy strong { font-size: 10px; font-weight: 650; }
+.milestone-copy small { color: #8b948e; font-size: 9px; overflow-wrap: anywhere; }
+.milestone-copy .pending-note { color: var(--amber); }
+.milestone-row .primary-button { min-height: 30px; font-size: 9px; }
+.row-actions { display: inline-flex; align-items: center; gap: 6px; }
+.row-actions .primary-button { min-height: 28px; }
+.workflow-empty { padding: 14px 17px; color: #89928c; font-size: 10px; }
+.workflow-hint { padding: 0 17px 12px; font-size: 9px; }
+.workflow-form, .standing-order-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 12px 17px 14px; border-top: 1px solid #edf0ed; }
+.standing-order-form { grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 0; border-bottom: 1px solid #edf0ed; }
+.workflow-form input, .workflow-form select, .standing-order-form input { min-width: 0; height: 34px; padding: 0 9px; border: 1px solid #dfe5df; border-radius: 4px; background: #fbfcfa; outline: 0; font: inherit; font-size: 10px; }
+.workflow-form input:focus, .workflow-form select:focus, .standing-order-form input:focus { border-color: #78a995; }
+.workflow-form .primary-button, .standing-order-form .primary-button { min-height: 34px; font-size: 9px; }
+.standing-callout { margin-top: 12px; }
+.status-pill.proofsubmitted, .status-pill.confirmedheld, .status-pill.resolvedpendingfinality { color: #946a21; background: #fbf4e6; }
+.status-pill.proofsubmitted > span, .status-pill.confirmedheld > span, .status-pill.resolvedpendingfinality > span { background: var(--amber); }
+.status-pill.confirmed, .status-pill.resolved { color: #4e6990; background: #edf2f9; }
+.status-pill.confirmed > span, .status-pill.resolved > span { background: #6e8db4; }
+.status-pill.disputed { color: #a95646; background: #fbefeb; }
+.status-pill.disputed > span { background: #cf765f; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -306,12 +332,13 @@ tr.row-selected td { background: #f4f8f3; }
   .content-grid { grid-template-columns: minmax(0, 1.25fr) minmax(265px, .9fr); }
   .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; }
   .detail-grid > div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .workflow-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
   .app-shell { display: block; padding-bottom: 60px; }
   .sidebar { position: fixed; z-index: 5; left: 0; right: 0; bottom: 0; width: 100%; min-width: 0; height: 58px; padding: 0 10px; flex-direction: row; align-items: center; border-top: 1px solid var(--line); border-right: 0; }
   .brand, .workspace-switch, .nav-label, .sidebar-bottom { display: none; }
-  .primary-nav { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .primary-nav { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
   .nav-item { justify-content: center; gap: 6px; min-height: 40px; padding: 0 3px; font-size: 9px; }
   .nav-item svg { width: 16px; }
   .nav-count { margin: 0 0 0 1px; padding: 1px 4px; }
