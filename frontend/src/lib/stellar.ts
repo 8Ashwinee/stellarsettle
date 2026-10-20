@@ -9,15 +9,17 @@ import {
   scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
-import { getNetwork, requestAccess, signTransaction } from "@stellar/freighter-api";
+import { getInitialNetwork, networkConfigs, rememberNetwork, type NetworkName } from "./networks";
+import { getWalletAdapter, type WalletId } from "./wallets";
 
-const network = import.meta.env.VITE_STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
-const rpcUrl = import.meta.env.VITE_STELLAR_RPC_URL || "https://soroban-testnet.stellar.org";
-const passphrase = network === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
-const contractId = import.meta.env.VITE_STELLAR_CONTRACT_ID as string;
-const server = new rpc.Server(rpcUrl);
+const initialConfig = networkConfigs[getInitialNetwork()];
+let network: NetworkName = initialConfig.name;
+let rpcUrl = initialConfig.rpcUrl;
+let passphrase = initialConfig.passphrase;
+let contractId = initialConfig.contractId;
+let server = new rpc.Server(rpcUrl);
 
-export type Wallet = { address: string; network: string; networkPassphrase: string };
+export type Wallet = { address: string; network: string; networkPassphrase: string; walletId?: WalletId };
 export type Shipment = {
   id: string;
   status: string;
@@ -60,6 +62,10 @@ function scSymbol(value: string) {
   return nativeToScVal(value, { type: "symbol" });
 }
 
+export async function connectWallet(walletId: WalletId = "freighter"): Promise<Wallet> {
+  const session = await getWalletAdapter(walletId).connect(passphrase, network);
+  return { ...session, walletId };
+}
 function scU32(value: number) {
   return nativeToScVal(value, { type: "u32" });
 }
@@ -106,12 +112,11 @@ async function invokeContract(wallet: Wallet, label: string, method: string, ...
   const simulated = await server.simulateTransaction(transaction);
   if ("error" in simulated) throw new Error(simulated.error);
   const prepared = rpc.assembleTransaction(transaction, simulated).build();
-  const signed = await signTransaction(prepared.toXDR(), {
+  const signedXdr = await getWalletAdapter(wallet.walletId).sign(prepared.toXDR(), {
     networkPassphrase: passphrase,
     address: wallet.address,
   });
-  if (signed.error) throw new Error(signed.error.message);
-  const signedTransaction = TransactionBuilder.fromXDR(signed.signedTxXdr, passphrase);
+  const signedTransaction = TransactionBuilder.fromXDR(signedXdr, passphrase);
   const submitted = await server.sendTransaction(signedTransaction);
   if (submitted.status === "ERROR") throw new Error("The network rejected the signed transaction.");
 
@@ -124,6 +129,21 @@ async function invokeContract(wallet: Wallet, label: string, method: string, ...
   throw new Error(`Transaction ${submitted.hash} is still pending. Check it on Stellar Expert.`);
 }
 
+export let appNetwork = network;
+export let configuredContractId = contractId;
+
+/** Switch the active network at runtime (no reload). Callers should reconnect the wallet and re-query. */
+export function setActiveNetwork(name: NetworkName) {
+  const config = networkConfigs[name];
+  network = name;
+  rpcUrl = config.rpcUrl;
+  passphrase = config.passphrase;
+  contractId = config.contractId;
+  server = new rpc.Server(rpcUrl);
+  appNetwork = network;
+  configuredContractId = contractId;
+  rememberNetwork(name);
+}
 export async function getShipmentSummary(address: string, shipmentId: string): Promise<Shipment> {
   return await readContract(address, "get_shipment_summary", scString(shipmentId)) as Shipment;
 }

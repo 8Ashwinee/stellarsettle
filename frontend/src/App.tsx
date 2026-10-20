@@ -4,7 +4,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Bell,
-  Check,
   ChevronDown,
   CircleHelp,
   ExternalLink,
@@ -85,7 +84,7 @@ const eventLabels: Record<string, string> = {
 function App() {
   const [path, setPath] = useState(currentPath);
   const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [shipmentId, setShipmentId] = useState("");
+  const [shipmentId, setShipmentId] = useState(loadLastShipmentId);
   const [shipment, setShipment] = useState<Shipment | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedEventType, setSelectedEventType] = useState<string | null>(null);
@@ -97,8 +96,9 @@ function App() {
   const [apiState, setApiState] = useState<"checking" | "online" | "offline">("checking");
   const [loading, setLoading] = useState(false);
   const [writing, setWriting] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const { setError, setNotice } = useNotifier();
+  const [, setNetworkVersion] = useState(0);
+  const [showWalletModal, setShowWalletModal] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
   const [metadataKey, setMetadataKey] = useState("");
   const [metadataValue, setMetadataValue] = useState("");
@@ -172,6 +172,41 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Restore the last-viewed shipment once a wallet is available.
+    const saved = loadLastShipmentId();
+    if (!wallet || !saved) return;
+    let cancelled = false;
+    setLoading(true);
+    getShipmentSummary(wallet.address, saved)
+      .then((result) => { if (!cancelled) setShipment(result); })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [wallet]);
+
+  async function handleNetworkChange(name: NetworkName) {
+    if (name === appNetwork) return;
+    const previous = wallet;
+    setActiveNetwork(name);
+    setShipment(null);
+    setNetworkVersion((version) => version + 1);
+    setWallet(null);
+    if (!previous) return;
+    try {
+      // Reconnecting sets the wallet again, which re-queries the last-viewed shipment.
+      setWallet(await connectWallet(previous.walletId));
+      setNotice(`Switched to ${name}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not reconnect wallet on the new network.");
+    }
+  }
+
+  function handleConnect() {
+    setShowWalletModal(true);
+  }
+
+  async function connectWith(walletId: WalletId) {
+    setShowWalletModal(false);
     const syncPage = () => setPage(currentPage());
     window.addEventListener("popstate", syncPage);
     return () => window.removeEventListener("popstate", syncPage);
@@ -186,7 +221,7 @@ function App() {
   async function handleConnect() {
     setError("");
     try {
-      setWallet(await connectWallet());
+      setWallet(await connectWallet(walletId));
       setNotice("Wallet connected");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not connect wallet.");
@@ -226,6 +261,8 @@ function App() {
   async function loadShipment(address: string, id: string) {
     setLoading(true);
     try {
+      setShipment(await getShipmentSummary(wallet.address, shipmentId.trim()));
+      saveLastShipmentId(shipmentId.trim());
       const [summary, full] = await Promise.all([getShipmentSummary(address, id), getShipment(address, id)]);
       setShipment(summary);
       setDetail(full);
@@ -415,6 +452,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      {showWalletModal && <WalletModal onSelect={connectWith} onClose={() => setShowWalletModal(false)} />}
       <aside className="sidebar">
         <a className="brand" href="#overview" aria-label="StellarSettle home">
           <span className="brand-mark"><span /></span>
@@ -436,10 +474,7 @@ function App() {
           <a className={`nav-item ${onVault ? "active" : ""}`} href="/vault" onClick={(event) => navigate("/vault", event)}><PiggyBank size={17} />Buyer vault</a>
         </nav>
         <div className="sidebar-bottom">
-          <div className="network-card">
-            <span className="network-dot" />
-            <span><strong>{appNetwork === "testnet" ? "Stellar Testnet" : "Stellar Mainnet"}</strong><small>Network configured</small></span>
-          </div>
+          <NetworkSwitcher current={appNetwork} onChange={handleNetworkChange} />
           <a className="nav-item help-link" href="https://developers.stellar.org/docs" target="_blank" rel="noreferrer"><CircleHelp size={17} />Stellar docs<ExternalLink size={13} /></a>
           <div className="profile-row">
             <span className="profile-avatar">{wallet ? wallet.address.slice(1, 2) : "S"}</span>
@@ -519,7 +554,7 @@ function App() {
                 <label className="search-input-wrap"><Search size={17} /><input aria-label="Shipment ID" placeholder="Enter shipment ID" value={shipmentId} onChange={(event) => setShipmentId(event.target.value)} /><kbd>↵</kbd></label>
                 <button className="primary-button" disabled={!wallet || loading || !shipmentId.trim()}>{loading ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />}{loading ? "Loading" : "Look up"}</button>
               </form>
-              {!wallet && <div className="inline-callout"><WalletCards size={16} /><span>Connect Freighter to query public contract data and submit authorized transactions.</span><button onClick={handleConnect}>Connect</button></div>}
+              {!wallet && <div className="inline-callout"><WalletCards size={16} /><span>Connect a Stellar wallet to query public contract data and submit authorized transactions.</span><button onClick={handleConnect}>Connect</button></div>}
               {shipment ? <div className="shipment-detail">
                 <div className="detail-topline"><div className="shipment-ref"><span className="shipment-icon"><FileSearch size={18} /></span><span><strong>{shipment.id}</strong><small>Created at ledger {shipment.created_at.toLocaleString()}</small></span></div><StatusPill status={status} /></div>
                 <div className="detail-grid">
