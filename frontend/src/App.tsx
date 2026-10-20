@@ -544,6 +544,8 @@ function App() {
           </section>
           </>}
 
+          <ShipmentWorkbench wallet={wallet} />
+
           <footer className="page-footer"><span>StellarSettle operations · Soroban contract interface</span><span><span className="footer-live" />{appNetwork} <span className="footer-sep">·</span> Contract {configuredContractId ? shortAddress(configuredContractId) : "not configured"}</span></footer>
         </div>}
       </main>

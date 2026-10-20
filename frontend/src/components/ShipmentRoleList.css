@@ -1,0 +1,7 @@
+.role-tabs { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; }
+.role-tabs button { padding: 6px 12px; border-radius: 8px; border: 1px solid #8884; background: transparent; color: inherit; cursor: pointer; }
+.role-tabs button.active { background: #8882; font-weight: 600; }
+.role-note { display: flex; align-items: center; gap: 8px; opacity: 0.8; margin: 8px 0; }
+.role-error { color: #e5484d; opacity: 1; }
+.role-ids { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.role-ids li { padding: 8px 10px; border: 1px solid #8883; border-radius: 8px; }
