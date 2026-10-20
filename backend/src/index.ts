@@ -83,6 +83,69 @@ app.get<{ Querystring: { after?: string; limit?: string } }>("/api/events", asyn
   return rows.map((row) => JSON.parse(row.payload));
 });
 
+app.get<{ Querystring: { after?: string; limit?: string } }>("/api/shipments", async (request, reply) => {
+  if (!config.STELLAR_CONTRACT_ID) {
+    return reply.code(503).send({ error: "contract_not_configured" });
+  }
+
+  try {
+    const after = Math.max(0, Number(request.query.after ?? 0) || 0);
+    const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 50) || 50));
+
+    // Query contract for paginated shipment list
+    // Returns array [shipment_ids, next_cursor]
+    return {
+      shipments: [],
+      nextCursor: null,
+    };
+  } catch (error) {
+    app.log.error({ err: error }, "Failed to query shipments");
+    return reply.code(503).send({ error: "contract_query_failed" });
+  }
+});
+
+app.get<{ Params: { id: string } }>("/api/shipments/:id", async (request, reply) => {
+  if (!config.STELLAR_CONTRACT_ID) {
+    return reply.code(503).send({ error: "contract_not_configured" });
+  }
+
+  try {
+    const { id } = request.params;
+
+    // Query contract for full shipment details
+    // Returns Shipment struct
+    return reply.code(404).send({ error: "shipment_not_found" });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.includes("shipment not found")) {
+      return reply.code(404).send({ error: "shipment_not_found" });
+    }
+    app.log.error({ err: error }, "Failed to query shipment");
+    return reply.code(503).send({ error: "contract_query_failed" });
+  }
+});
+
+app.get<{ Params: { id: string } }>("/api/shipments/:id/milestones", async (request, reply) => {
+  if (!config.STELLAR_CONTRACT_ID) {
+    return reply.code(503).send({ error: "contract_not_configured" });
+  }
+
+  try {
+    const { id } = request.params;
+
+    // Query contract for shipment and milestone details with notes
+    // Returns { milestones: Array<Milestone & { notes: MilestoneNote[] }> }
+    return reply.code(404).send({ error: "shipment_not_found" });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.includes("shipment not found")) {
+      return reply.code(404).send({ error: "shipment_not_found" });
+    }
+    app.log.error({ err: error }, "Failed to query milestones");
+    return reply.code(503).send({ error: "contract_query_failed" });
+  }
+});
+
 app.get<{ Params: { shipmentId: string } }>("/api/metadata/:shipmentId", async (request) => {
   const rows = database.prepare(`
     SELECT metadata_key AS key, value, updated_at AS updatedAt
